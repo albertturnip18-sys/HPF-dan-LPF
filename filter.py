@@ -531,4 +531,571 @@ with tab1:
                 vout = lpf_vout(Vin, R, C_val, f)
                 gain = vout / Vin
                 gain_db = to_db(gain)
-                phase = phase_
+                phase = phase_lpf(f, R, C_val)
+                Xc = 1 / (2 * np.pi * f * C_val)
+                rows.append({
+                    "Kapasitor": cap_label,
+                    "C (F)": C_val,
+                    "f (Hz)": f,
+                    "fc (Hz)": round(fc, 2),
+                    "Xc (Ω)": round(Xc, 2),
+                    "Vout (V)": round(vout, 4),
+                    "Gain |H|": round(gain, 4),
+                    "Gain (dB)": round(gain_db, 2),
+                    "Phase (°)": round(phase, 2),
+                })
+
+        df1 = pd.DataFrame(rows)
+
+        # VISUALISASI BAR
+        fig1a = go.Figure()
+        colors_lpf = px.colors.qualitative.Set2
+        for i, cap_label in enumerate(selected_caps):
+            sub = df1[df1["Kapasitor"] == cap_label]
+            fig1a.add_trace(go.Bar(
+                name=cap_label,
+                x=[f"{r['f (Hz)']} Hz" for _, r in sub.iterrows()],
+                y=sub["Vout (V)"],
+                marker_color=colors_lpf[i % len(colors_lpf)],
+                text=[f"{v:.3f} V" for v in sub["Vout (V)"]],
+                textposition="outside",
+            ))
+
+        fig1a.add_hline(y=Vin, line_dash="dash", line_color="#ffffff",
+                        annotation_text=f"Vin = {Vin}V", annotation_position="right")
+        fig1a.update_layout(
+            title="LPF · Vout vs Frekuensi (50–60 Hz) untuk berbagai Kapasitor",
+            xaxis_title="Frekuensi (Hz)",
+            yaxis_title="Vout (Volt)",
+            plot_bgcolor="#0a0e1a",
+            paper_bgcolor="#111827",
+            font=dict(color="#e2e8f0", family="JetBrains Mono"),
+            barmode="group",
+            legend=dict(bgcolor="#0a0e1a", bordercolor="#1e2d45"),
+            yaxis=dict(range=[0, Vin * 1.15]),
+        )
+        st.plotly_chart(fig1a, use_container_width=True)
+
+        # Heatmap Gain dB
+        pivot_db = df1.pivot_table(index="Kapasitor", columns="f (Hz)", values="Gain (dB)")
+        fig1b = go.Figure(data=go.Heatmap(
+            z=pivot_db.values,
+            x=[f"{c} Hz" for c in pivot_db.columns],
+            y=pivot_db.index,
+            colorscale="Blues",
+            text=np.round(pivot_db.values, 2),
+            texttemplate="%{text} dB",
+            colorbar=dict(title="Gain (dB)"),
+        ))
+        fig1b.update_layout(
+            title="Heatmap Gain (dB) — LPF · Variasi C",
+            plot_bgcolor="#0a0e1a", paper_bgcolor="#111827",
+            font=dict(color="#e2e8f0", family="JetBrains Mono"),
+        )
+        st.plotly_chart(fig1b, use_container_width=True)
+
+        # Tabel Data Lengkap
+        st.markdown('<div class="section-header lpf">📊 Tabel Data LPF · Variasi C</div>', unsafe_allow_html=True)
+        st.dataframe(
+            df1[["Kapasitor", "f (Hz)", "fc (Hz)", "Xc (Ω)", "Vout (V)", "Gain (dB)", "Phase (°)"]],
+            use_container_width=True, hide_index=True
+        )
+
+        # Penjelasan fisika
+        st.markdown("""
+        <div class="explanation-box">
+        <b>📌 Pengaruh Nilai C terhadap Vout LPF pada f = 50–60 Hz:</b><br><br>
+        Nilai kapasitor menentukan frekuensi cutoff (fc = 1/2πRC), yang akhirnya menentukan seberapa besar Vout pada frekuensi tertentu.<br><br>
+        • <b>Kapasitor kecil (pF–nF) → Vout ≈ Vin:</b> fc sangat tinggi → f=50Hz jauh di bawah fc → Xc sangat besar → 
+          hampir semua tegangan jatuh di kapasitor (Vout) → Vout mendekati Vin (≈100%).<br><br>
+        • <b>Kapasitor sedang (100nF–1µF) → Vout mulai turun:</b> fc berkisar 159Hz–1.6kHz → f=50Hz masih di passband 
+          tetapi semakin mendekati fc → Xc mulai sebanding R → Vout mulai atenuasi ringan.<br><br>
+        • <b>Kapasitor besar (10µF–100µF) → Vout ≈ 0:</b> fc turun ke 1.6Hz–16Hz → f=50Hz sudah jauh melewati fc → 
+          Xc sangat kecil (hampir short) → tegangan di kapasitor nyaris nol → Vout sangat kecil.<br><br>
+        • <b>Perubahan 50→60 Hz:</b> Kenaikan 20% frekuensi membuat Xc turun 16.7%, mengakibatkan Vout ikut turun,
+          terutama pada kapasitor besar di mana f sudah berada jauh di stopband.
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════
+#  TAB 2: LPF — VARIASI FREKUENSI
+# ═══════════════════════════════════════════════════
+with tab2:
+    st.markdown(f'<div class="section-header lpf">🔵 LPF · Soal 1b: Variasi Frekuensi (C = {C_fixed_label}, R = {R/1000:.1f}kΩ)</div>', unsafe_allow_html=True)
+
+    fc_lpf = cutoff_frequency(R, C_fixed)
+
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    with col_m1:
+        st.metric("fc (Cutoff)", f"{fc_lpf:.1f} Hz")
+    with col_m2:
+        st.metric("Vin", f"{Vin} V")
+    with col_m3:
+        vout_at_fc = lpf_vout(Vin, R, C_fixed, fc_lpf)
+        st.metric("Vout @ fc", f"{vout_at_fc:.3f} V")
+    with col_m4:
+        st.metric("Gain @ fc", f"{to_db(vout_at_fc/Vin):.2f} dB")
+
+    # Data frekuensi sweep
+    f_arr = np.logspace(np.log10(f_min), np.log10(f_max), 500)
+    vout_arr = lpf_vout(Vin, R, C_fixed, f_arr)
+    gain_arr = vout_arr / Vin
+    gain_db_arr = to_db(gain_arr)
+    phase_arr = phase_lpf(f_arr, R, C_fixed)
+
+    # Bode Plot (Gain + Phase)
+    fig2 = make_subplots(rows=2, cols=1,
+                         subplot_titles=("Bode Plot — Gain (dB)", "Bode Plot — Phase (°)"),
+                         vertical_spacing=0.12)
+
+    fig2.add_trace(go.Scatter(
+        x=f_arr, y=gain_db_arr,
+        mode='lines', name='Gain LPF',
+        line=dict(color='#00d4ff', width=2.5)
+    ), row=1, col=1)
+
+    # -3dB line
+    fig2.add_hline(y=-3, line_dash="dot", line_color="#ff6b35",
+                   annotation_text="-3 dB (Cutoff)", row=1, col=1)
+    fig2.add_vline(x=fc_lpf, line_dash="dash", line_color="#ffd700",
+                   annotation_text=f"fc={fc_lpf:.1f}Hz")
+
+    fig2.add_trace(go.Scatter(
+        x=f_arr, y=phase_arr,
+        mode='lines', name='Phase LPF',
+        line=dict(color='#7c3aed', width=2.5)
+    ), row=2, col=1)
+    fig2.add_hline(y=-45, line_dash="dot", line_color="#ff6b35",
+                   annotation_text="-45° @ fc", row=2, col=1)
+
+    for row in [1, 2]:
+        fig2.update_xaxes(type="log", title_text="Frekuensi (Hz)", row=row, col=1,
+                          gridcolor="#1e2d45", color="#e2e8f0")
+    fig2.update_yaxes(title_text="Gain (dB)", row=1, col=1, gridcolor="#1e2d45", color="#e2e8f0")
+    fig2.update_yaxes(title_text="Phase (°)", row=2, col=1, gridcolor="#1e2d45", color="#e2e8f0")
+
+    fig2.update_layout(
+        height=600,
+        plot_bgcolor="#0a0e1a", paper_bgcolor="#111827",
+        font=dict(color="#e2e8f0", family="JetBrains Mono"),
+        legend=dict(bgcolor="#0a0e1a", bordercolor="#1e2d45"),
+        showlegend=True,
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # Vout linear
+    fig2b = go.Figure()
+    fig2b.add_trace(go.Scatter(
+        x=f_arr, y=vout_arr,
+        mode='lines', name='Vout LPF',
+        line=dict(color='#00d4ff', width=2.5),
+        fill='tozeroy', fillcolor='rgba(0,212,255,0.08)'
+    ))
+    fig2b.add_hline(y=Vin * 0.707, line_dash="dash", line_color="#ffd700",
+                    annotation_text=f"0.707·Vin = {Vin*0.707:.3f}V")
+    fig2b.add_vline(x=fc_lpf, line_dash="dash", line_color="#ff6b35",
+                    annotation_text=f"fc = {fc_lpf:.1f} Hz")
+    fig2b.update_xaxes(type="log", title_text="Frekuensi (Hz)", gridcolor="#1e2d45")
+    fig2b.update_yaxes(title_text="Vout (V)", gridcolor="#1e2d45")
+    fig2b.update_layout(
+        title="LPF · Vout vs Frekuensi (Skala Log)",
+        plot_bgcolor="#0a0e1a", paper_bgcolor="#111827",
+        font=dict(color="#e2e8f0", family="JetBrains Mono"),
+    )
+    st.plotly_chart(fig2b, use_container_width=True)
+
+    # Tabel sampel frekuensi
+    sample_freqs = [10, 50, 60, 100, 1e3, 10e3, 100e3, 1e6]
+    rows2 = []
+    for f in sample_freqs:
+        if f_min <= f <= f_max:
+            Xc = 1 / (2 * np.pi * f * C_fixed)
+            vout = lpf_vout(Vin, R, C_fixed, f)
+            rows2.append({
+                "f (Hz)": f,
+                "Xc (Ω)": round(Xc, 3),
+                "Z_total (Ω)": round(np.sqrt(R**2 + Xc**2), 3),
+                "Vout (V)": round(vout, 4),
+                "Gain |H|": round(vout/Vin, 4),
+                "Gain (dB)": round(to_db(vout/Vin), 2),
+                "Phase (°)": round(phase_lpf(f, R, C_fixed), 2),
+                "Keterangan": "⬅ fc" if abs(f - fc_lpf) < fc_lpf * 0.1 else (
+                    "Lolos ✅" if f < fc_lpf else "Teredam ❌")
+            })
+
+    if rows2:
+        df2 = pd.DataFrame(rows2)
+        st.markdown('<div class="section-header lpf">📊 Tabel Data Sampling LPF · Variasi f</div>', unsafe_allow_html=True)
+        st.dataframe(df2, use_container_width=True, hide_index=True)
+
+    st.markdown(f"""
+    <div class="explanation-box">
+    <b>📌 Bagaimana Frekuensi Mempengaruhi Vout LPF (C = {C_fixed_label}):</b><br><br>
+    Rumus Vout LPF = Vin · Xc / √(R² + Xc²) — Vout sepenuhnya ditentukan oleh rasio Xc terhadap impedansi total.<br><br>
+    • <b>Zona Lolos (f &lt; fc = {fc_lpf:.1f} Hz):</b> Xc &gt; R → Vout &gt; Vin/√2. 
+      Semakin kecil frekuensi, Xc semakin besar, Vout semakin mendekati Vin.<br><br>
+    • <b>Titik Cutoff (f = fc = {fc_lpf:.1f} Hz):</b> Xc = R → Z = R√2 → 
+      Vout = Vin·Xc/Z = Vin/√2 = <b>{Vin/np.sqrt(2):.3f}V</b>. 
+      Ini setara -3dB dan phase shift -45°. Daya output = 50% daya input.<br><br>
+    • <b>Zona Teredam (f &gt; fc):</b> Xc &lt; R → Vout &lt; Vin/√2. 
+      Setiap kenaikan frekuensi 10× (1 dekade) → Vout turun 10× → gain turun -20 dB.<br><br>
+    • <b>Kesimpulan:</b> Frekuensi adalah "pengendali" Vout pada filter. Frekuensi menentukan nilai Xc, 
+      Xc menentukan pembagian tegangan antara R dan C, dan dari situ Vout ditentukan.
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════
+#  TAB 3: HPF
+# ═══════════════════════════════════════════════════
+with tab3:
+    st.markdown('<div class="section-header hpf">🟠 HPF · Soal 2a & 2b</div>', unsafe_allow_html=True)
+
+    sub_tab1, sub_tab2 = st.tabs(["2a · Variasi C (f = 50–60 Hz)", "2b · Variasi Frekuensi"])
+
+    with sub_tab1:
+        if not selected_caps:
+            st.warning("Pilih minimal 1 kapasitor di sidebar!")
+        else:
+            freqs_hpf1 = [50, 55, 60]
+            rows_hpf = []
+            for cap_label in selected_caps:
+                C_val = KAPASITOR_PASARAN[cap_label]
+                fc = cutoff_frequency(R, C_val)
+                for f in freqs_hpf1:
+                    vout = hpf_vout(Vin, R, C_val, f)
+                    gain = vout / Vin
+                    gain_db = to_db(gain)
+                    phase = phase_hpf(f, R, C_val)
+                    Xc = 1 / (2 * np.pi * f * C_val)
+                    rows_hpf.append({
+                        "Kapasitor": cap_label,
+                        "f (Hz)": f,
+                        "fc (Hz)": round(fc, 2),
+                        "Xc (Ω)": round(Xc, 2),
+                        "Vout (V)": round(vout, 4),
+                        "Gain (dB)": round(gain_db, 2),
+                        "Phase (°)": round(phase, 2),
+                    })
+
+            df_hpf1 = pd.DataFrame(rows_hpf)
+
+            fig3a = go.Figure()
+            colors_hpf = px.colors.qualitative.Vivid
+            for i, cap_label in enumerate(selected_caps):
+                sub = df_hpf1[df_hpf1["Kapasitor"] == cap_label]
+                fig3a.add_trace(go.Bar(
+                    name=cap_label,
+                    x=[f"{r['f (Hz)']} Hz" for _, r in sub.iterrows()],
+                    y=sub["Vout (V)"],
+                    marker_color=colors_hpf[i % len(colors_hpf)],
+                    text=[f"{v:.3f} V" for v in sub["Vout (V)"]],
+                    textposition="outside",
+                ))
+            fig3a.add_hline(y=Vin, line_dash="dash", line_color="#ffffff",
+                            annotation_text=f"Vin = {Vin}V")
+            fig3a.update_layout(
+                title="HPF · Vout vs Frekuensi (50–60 Hz)",
+                xaxis_title="Frekuensi (Hz)",
+                yaxis_title="Vout (Volt)",
+                plot_bgcolor="#0a0e1a", paper_bgcolor="#111827",
+                font=dict(color="#e2e8f0", family="JetBrains Mono"),
+                barmode="group",
+                yaxis=dict(range=[0, Vin * 1.15]),
+            )
+            st.plotly_chart(fig3a, use_container_width=True)
+            st.dataframe(df_hpf1, use_container_width=True, hide_index=True)
+
+            st.markdown("""
+            <div class="explanation-box">
+            <b>📌 Pengaruh Nilai C terhadap Vout HPF pada f = 50–60 Hz:</b><br><br>
+            Rumus Vout HPF = Vin · R / √(R² + Xc²) — Vout naik ketika Xc turun (frekuensi naik).<br><br>
+            • <b>Kapasitor kecil (pF–nF) → Vout ≈ 0:</b> fc sangat tinggi → f=50Hz jauh di bawah fc → 
+              Xc sangat besar → penyebut √(R²+Xc²) ≈ Xc → Vout = Vin·R/Xc ≈ 0. Sinyal diblokir total.<br><br>
+            • <b>Kapasitor sedang–besar (µF) → Vout mendekati Vin:</b> fc rendah → f=50Hz sudah di atas fc → 
+              Xc kecil → penyebut ≈ R → Vout = Vin·R/R = Vin. HPF dengan kapasitor besar meloloskan 50Hz!<br><br>
+            • <b>Perbedaan mencolok vs LPF:</b> Pola Vout HPF <b>TERBALIK</b> dibanding LPF.
+              Kapasitor kecil → LPF lolos tapi HPF blokir. Kapasitor besar → LPF blokir tapi HPF lolos.<br><br>
+            • Ini membuktikan bahwa Vout bukan hanya ditentukan oleh nilai komponen,
+              melainkan oleh <b>posisi titik pengukuran (C atau R)</b> dalam rangkaian.
+            </div>
+            """, unsafe_allow_html=True)
+
+    with sub_tab2:
+        st.markdown(f'<div class="section-header hpf">HPF · Soal 2b: Variasi Frekuensi (C = {C_fixed_label})</div>', unsafe_allow_html=True)
+
+        fc_hpf = cutoff_frequency(R, C_fixed)
+
+        col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+        with col_h1:
+            st.metric("fc (Cutoff)", f"{fc_hpf:.1f} Hz")
+        with col_h2:
+            st.metric("Vin", f"{Vin} V")
+        with col_h3:
+            vout_hpf_fc = hpf_vout(Vin, R, C_fixed, fc_hpf)
+            st.metric("Vout @ fc", f"{vout_hpf_fc:.3f} V")
+        with col_h4:
+            st.metric("Gain @ fc", f"{to_db(vout_hpf_fc/Vin):.2f} dB")
+
+        f_arr2 = np.logspace(np.log10(f_min), np.log10(f_max), 500)
+        vout_hpf_arr = hpf_vout(Vin, R, C_fixed, f_arr2)
+        gain_hpf_arr = vout_hpf_arr / Vin
+        gain_hpf_db_arr = to_db(gain_hpf_arr)
+        phase_hpf_arr = phase_hpf(f_arr2, R, C_fixed)
+
+        fig3b = make_subplots(rows=2, cols=1,
+                              subplot_titles=("Bode Plot HPF — Gain (dB)", "Bode Plot HPF — Phase (°)"),
+                              vertical_spacing=0.12)
+        fig3b.add_trace(go.Scatter(
+            x=f_arr2, y=gain_hpf_db_arr,
+            mode='lines', name='Gain HPF',
+            line=dict(color='#ff6b35', width=2.5)
+        ), row=1, col=1)
+        fig3b.add_hline(y=-3, line_dash="dot", line_color="#00d4ff",
+                        annotation_text="-3 dB", row=1, col=1)
+        fig3b.add_vline(x=fc_hpf, line_dash="dash", line_color="#ffd700",
+                        annotation_text=f"fc={fc_hpf:.1f}Hz")
+
+        fig3b.add_trace(go.Scatter(
+            x=f_arr2, y=phase_hpf_arr,
+            mode='lines', name='Phase HPF',
+            line=dict(color='#7c3aed', width=2.5)
+        ), row=2, col=1)
+        fig3b.add_hline(y=45, line_dash="dot", line_color="#ff6b35",
+                        annotation_text="+45° @ fc", row=2, col=1)
+
+        for row in [1, 2]:
+            fig3b.update_xaxes(type="log", title_text="Frekuensi (Hz)", row=row, col=1,
+                                gridcolor="#1e2d45", color="#e2e8f0")
+        fig3b.update_yaxes(title_text="Gain (dB)", row=1, col=1, gridcolor="#1e2d45", color="#e2e8f0")
+        fig3b.update_yaxes(title_text="Phase (°)", row=2, col=1, gridcolor="#1e2d45", color="#e2e8f0")
+        fig3b.update_layout(
+            height=600,
+            plot_bgcolor="#0a0e1a", paper_bgcolor="#111827",
+            font=dict(color="#e2e8f0", family="JetBrains Mono"),
+        )
+        st.plotly_chart(fig3b, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════
+#  TAB 4: PERBANDINGAN LPF vs HPF
+# ═══════════════════════════════════════════════════
+with tab4:
+    st.markdown('<div class="section-header both">⚖️ Perbandingan LPF vs HPF</div>', unsafe_allow_html=True)
+
+    fc_val = cutoff_frequency(R, C_fixed)
+    f_comp = np.logspace(np.log10(f_min), np.log10(f_max), 800)
+    vout_lpf = lpf_vout(Vin, R, C_fixed, f_comp)
+    vout_hpf = hpf_vout(Vin, R, C_fixed, f_comp)
+    gain_lpf_db = to_db(vout_lpf / Vin)
+    gain_hpf_db = to_db(vout_hpf / Vin)
+    ph_lpf = phase_lpf(f_comp, R, C_fixed)
+    ph_hpf = phase_hpf(f_comp, R, C_fixed)
+
+    # Superimposed Bode Plot
+    fig4a = make_subplots(rows=2, cols=1,
+                          subplot_titles=("Gain (dB) — LPF vs HPF", "Phase (°) — LPF vs HPF"),
+                          vertical_spacing=0.12)
+    fig4a.add_trace(go.Scatter(x=f_comp, y=gain_lpf_db, name="LPF Gain",
+                               line=dict(color="#00d4ff", width=2.5)), row=1, col=1)
+    fig4a.add_trace(go.Scatter(x=f_comp, y=gain_hpf_db, name="HPF Gain",
+                               line=dict(color="#ff6b35", width=2.5)), row=1, col=1)
+    fig4a.add_hline(y=-3, line_dash="dot", line_color="#ffd700",
+                    annotation_text="-3 dB", row=1, col=1)
+    fig4a.add_vline(x=fc_val, line_dash="dash", line_color="#7c3aed",
+                    annotation_text=f"fc={fc_val:.1f}Hz")
+
+    fig4a.add_trace(go.Scatter(x=f_comp, y=ph_lpf, name="LPF Phase",
+                               line=dict(color="#00d4ff", width=2, dash="dot")), row=2, col=1)
+    fig4a.add_trace(go.Scatter(x=f_comp, y=ph_hpf, name="HPF Phase",
+                               line=dict(color="#ff6b35", width=2, dash="dot")), row=2, col=1)
+    fig4a.add_hline(y=-45, line_dash="dot", line_color="#00d4ff",
+                    annotation_text="LPF: -45°", row=2, col=1)
+    fig4a.add_hline(y=45, line_dash="dot", line_color="#ff6b35",
+                    annotation_text="HPF: +45°", row=2, col=1)
+
+    for row in [1, 2]:
+        fig4a.update_xaxes(type="log", title_text="Frekuensi (Hz)", row=row, col=1,
+                            gridcolor="#1e2d45", color="#e2e8f0")
+    fig4a.update_yaxes(title_text="Gain (dB)", row=1, col=1, gridcolor="#1e2d45")
+    fig4a.update_yaxes(title_text="Phase (°)", row=2, col=1, gridcolor="#1e2d45")
+    fig4a.update_layout(
+        height=650,
+        plot_bgcolor="#0a0e1a", paper_bgcolor="#111827",
+        font=dict(color="#e2e8f0", family="JetBrains Mono"),
+        legend=dict(bgcolor="#0a0e1a", bordercolor="#1e2d45"),
+    )
+    st.plotly_chart(fig4a, use_container_width=True)
+
+    # Vout Overlay
+    fig4b = go.Figure()
+    fig4b.add_trace(go.Scatter(x=f_comp, y=vout_lpf, name="Vout LPF",
+                               line=dict(color="#00d4ff", width=2.5),
+                               fill='tozeroy', fillcolor='rgba(0,212,255,0.06)'))
+    fig4b.add_trace(go.Scatter(x=f_comp, y=vout_hpf, name="Vout HPF",
+                               line=dict(color="#ff6b35", width=2.5),
+                               fill='tozeroy', fillcolor='rgba(255,107,53,0.06)'))
+
+    # Verifikasi LPF + HPF dengan Vin
+    vout_sum = np.sqrt(vout_lpf**2 + vout_hpf**2)
+    fig4b.add_trace(go.Scatter(x=f_comp, y=vout_sum,
+                               name="√(Vout_LPF² + Vout_HPF²)",
+                               line=dict(color="#7c3aed", width=1.5, dash='dot')))
+    fig4b.add_hline(y=Vin, line_dash="dash", line_color="#ffd700",
+                    annotation_text=f"Vin = {Vin}V")
+    fig4b.add_vline(x=fc_val, line_dash="dash", line_color="#aaa")
+    fig4b.update_xaxes(type="log", title_text="Frekuensi (Hz)", gridcolor="#1e2d45")
+    fig4b.update_yaxes(title_text="Vout (V)", gridcolor="#1e2d45")
+    fig4b.update_layout(
+        title="Vout LPF vs HPF (dan verifikasi: √(Vlpf²+Vhpf²) = Vin)",
+        plot_bgcolor="#0a0e1a", paper_bgcolor="#111827",
+        font=dict(color="#e2e8f0", family="JetBrains Mono"),
+        legend=dict(bgcolor="#0a0e1a", bordercolor="#1e2d45"),
+    )
+    st.plotly_chart(fig4b, use_container_width=True)
+
+    # ─── ANIMASI SINYAL WAKTU ───
+    st.markdown('<div class="section-header both">🎬 Animasi: Sinyal Domain Waktu</div>', unsafe_allow_html=True)
+
+    f_demo = st.slider("Pilih frekuensi demo (Hz):",
+                       min_value=float(f_min), max_value=float(min(f_max, 1e6)),
+                       value=float(fc_val), format="%.1f")
+
+    t = np.linspace(0, 3 / max(f_demo, 1), 1000)
+    v_in_t = Vin * np.sin(2 * np.pi * f_demo * t)
+
+    vout_lpf_f = float(lpf_vout(Vin, R, C_fixed, f_demo))
+    vout_hpf_f = float(hpf_vout(Vin, R, C_fixed, f_demo))
+    phi_lpf_rad = np.radians(phase_lpf(f_demo, R, C_fixed))
+    phi_hpf_rad = np.radians(phase_hpf(f_demo, R, C_fixed))
+
+    v_lpf_t = vout_lpf_f * np.sin(2 * np.pi * f_demo * t + phi_lpf_rad)
+    v_hpf_t = vout_hpf_f * np.sin(2 * np.pi * f_demo * t + phi_hpf_rad)
+
+    fig_anim = go.Figure()
+    fig_anim.add_trace(go.Scatter(
+        x=t * 1000, y=v_in_t,
+        mode='lines', name='Vin',
+        line=dict(color='#ffd700', width=2.5, dash='dot')
+    ))
+    fig_anim.add_trace(go.Scatter(
+        x=t * 1000, y=v_lpf_t,
+        mode='lines', name=f'Vout LPF ({vout_lpf_f:.3f}V)',
+        line=dict(color='#00d4ff', width=2.5)
+    ))
+    fig_anim.add_trace(go.Scatter(
+        x=t * 1000, y=v_hpf_t,
+        mode='lines', name=f'Vout HPF ({vout_hpf_f:.3f}V)',
+        line=dict(color='#ff6b35', width=2.5)
+    ))
+    fig_anim.add_hline(y=0, line_color="#333", line_width=1)
+    fig_anim.update_xaxes(title_text="Waktu (ms)", gridcolor="#1e2d45")
+    fig_anim.update_yaxes(title_text="Tegangan (V)", gridcolor="#1e2d45")
+    fig_anim.update_layout(
+        title=f"Sinyal Domain Waktu pada f = {f_demo:.1f} Hz  |  fc = {fc_val:.1f} Hz",
+        plot_bgcolor="#0a0e1a", paper_bgcolor="#111827",
+        font=dict(color="#e2e8f0", family="JetBrains Mono"),
+        legend=dict(bgcolor="#0a0e1a", bordercolor="#1e2d45"),
+    )
+    st.plotly_chart(fig_anim, use_container_width=True)
+
+    # Kolom metrik perbandingan
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown(f"""
+        <div class="formula-box lpf">
+        <div class="formula-title">🔵 LPF @ f = {f_demo:.1f} Hz</div>
+        Vout = <b>{vout_lpf_f:.4f} V</b><br>
+        Gain = <b>{to_db(vout_lpf_f/Vin):.2f} dB</b><br>
+        Phase = <b>{np.degrees(phi_lpf_rad):.2f}°</b><br>
+        Status: {'✅ Passband (f < fc)' if f_demo < fc_val else ('⚡ @ Cutoff' if abs(f_demo-fc_val)<fc_val*0.05 else '❌ Stopband (f > fc)')}
+        </div>
+        """, unsafe_allow_html=True)
+    with col_b:
+        st.markdown(f"""
+        <div class="formula-box hpf">
+        <div class="formula-title">🟠 HPF @ f = {f_demo:.1f} Hz</div>
+        Vout = <b>{vout_hpf_f:.4f} V</b><br>
+        Gain = <b>{to_db(vout_hpf_f/Vin):.2f} dB</b><br>
+        Phase = <b>{np.degrees(phi_hpf_rad):.2f}°</b><br>
+        Status: {'❌ Stopband (f < fc)' if f_demo < fc_val else ('⚡ @ Cutoff' if abs(f_demo-fc_val)<fc_val*0.05 else '✅ Passband (f > fc)')}
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ─── TABEL PERBANDINGAN RUMUS ───
+    st.markdown('<div class="section-header both">📐 Perbandingan Rumus & Perilaku</div>', unsafe_allow_html=True)
+
+    comp_data = {
+        "Aspek": [
+            "Posisi Output", "Transfer Function H(jω)", "Gain |H(f)|",
+            "Phase Shift φ", "Perilaku f→0", "Perilaku f→∞",
+            "Vout @ f=fc", "Phase @ f=fc", "Slope Atenuasi",
+            "Aplikasi Umum"
+        ],
+        "LPF 🔵": [
+            "Dari kapasitor (C) ke ground",
+            "1 / (1 + jωRC)",
+            "1 / √(1 + (f/fc)²)",
+            "−arctan(f/fc)  [0° → −90°]",
+            "Xc→∞, Vout→Vin (lolos ✅)",
+            "Xc→0, Vout→0 (blokir ❌)",
+            f"Vin/√2 = {Vin/np.sqrt(2):.3f} V",
+            "−45°  (sinyal lag)",
+            "+20 dB/dekade naik ke rendah",
+            "Audio bass, power supply smoothing, anti-aliasing"
+        ],
+        "HPF 🟠": [
+            "Dari resistor (R) ke ground",
+            "jωRC / (1 + jωRC)",
+            "(f/fc) / √(1 + (f/fc)²)",
+            "90° − arctan(f/fc)  [+90° → 0°]",
+            "Xc→∞, Vout→0 (blokir ❌)",
+            "Xc→0, Vout→Vin (lolos ✅)",
+            f"Vin/√2 = {Vin/np.sqrt(2):.3f} V",
+            "+45°  (sinyal lead)",
+            "+20 dB/dekade naik ke tinggi",
+            "Audio treble, DC blocking, edge detection"
+        ],
+    }
+    df_comp = pd.DataFrame(comp_data)
+    st.dataframe(df_comp, use_container_width=True, hide_index=True)
+
+    # Penjelasan perbandingan akhir
+    st.markdown(f"""
+    <div class="explanation-box">
+    <b>📌 Perbandingan Rumus Vout LPF vs HPF — Apa yang Berbeda dan Mengapa:</b><br><br>
+
+    <b>1. Perbedaan Rumus Vout (Inti Perbedaan Filter):</b><br>
+    &nbsp;&nbsp;&nbsp;▸ <b>LPF: Vout = Vin · <span style="color:#00d4ff">Xc</span> / √(R² + Xc²)</b> → Vout tergantung <u>Xc</u> di pembilang<br>
+    &nbsp;&nbsp;&nbsp;▸ <b>HPF: Vout = Vin · <span style="color:#ff6b35">R</span> / √(R² + Xc²)</b> → Vout tergantung <u>R</u> di pembilang<br>
+    Penyebutnya <b>identik</b> (Z = √(R²+Xc²)), hanya pembilangnya yang berbeda (Xc vs R).<br>
+    Karena Xc berubah terhadap frekuensi tapi R tidak, itulah yang membuat keduanya berperilaku berlawanan.<br><br>
+
+    <b>2. Pengaruh Frekuensi terhadap Vout:</b><br>
+    &nbsp;&nbsp;&nbsp;▸ f naik → Xc turun → Vout LPF turun, Vout HPF naik<br>
+    &nbsp;&nbsp;&nbsp;▸ f turun → Xc naik → Vout LPF naik, Vout HPF turun<br>
+    Di titik fc = {fc_val:.2f} Hz, Xc = R, sehingga keduanya menghasilkan Vout = Vin/√2 = <b>{Vin/np.sqrt(2):.3f}V</b> (-3dB).<br><br>
+
+    <b>3. Dualitas Matematika (Vout LPF + Vout HPF = Vin):</b><br>
+    |Vout_LPF|² + |Vout_HPF|² = Vin² — karena Xc² + R² = Z²<br>
+    Artinya: energi yang "ditolak" LPF persis sama dengan energi yang "diloloskan" HPF.<br>
+    Verifikasi: √(Vout_LPF² + Vout_HPF²) = Vin (garis ungu pada grafik Vout di atas).<br><br>
+
+    <b>4. Perbedaan Phase Vout:</b><br>
+    &nbsp;&nbsp;&nbsp;▸ <b>LPF:</b> Vout <i>tertinggal</i> dari Vin (phase lag: 0° → −90°, dengan −45° di fc)<br>
+    &nbsp;&nbsp;&nbsp;▸ <b>HPF:</b> Vout <i>mendahului</i> Vin (phase lead: +90° → 0°, dengan +45° di fc)<br>
+    Ini berarti tidak hanya amplitudo Vout yang berbeda, tapi juga <b>waktu kemunculan</b> sinyal output berbeda.
+    </div>
+    """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+#  FOOTER
+# ─────────────────────────────────────────────
+st.markdown("---")
+st.markdown("""
+<div style='text-align:center;color:#64748b;font-family:JetBrains Mono,monospace;font-size:0.78rem;padding:1rem;'>
+⚡ RC Filter Simulator<br>
+Rumus: LPF Vout = Vin·Xc/Z | HPF Vout = Vin·R/Z | Z = √(R²+Xc²) | Xc = 1/(2πfC) | fc = 1/(2πRC)
+</div>
+""", unsafe_allow_html=True)
