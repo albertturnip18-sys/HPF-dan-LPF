@@ -1,936 +1,706 @@
-import streamlit as st
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-from scipy.integrate import solve_ivp
-import pandas as pd
-import warnings
-warnings.filterwarnings('ignore')
+"""
+GNC Dashboard — Streamlit
+Sintesis Green-Nanoporous Carbon dari Biomassa Kulit Durian Kota Medan
+Berisi: (1) Flowchart sintesis 10 tahap, (2) 5 grafik elektrokimia Lampiran 2
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
+Cara menjalankan:
+    pip install streamlit plotly pandas numpy
+    streamlit run gnc_dashboard.py
+"""
+
+import streamlit as st
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+import pandas as pd
+
+# ─── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="RLC Circuit Simulator · RKF45 Adaptive",
-    page_icon="⚡",
+    page_title="GNC Kulit Durian — Dashboard",
+    page_icon="🔋",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# ─────────────────────────────────────────────
-# CUSTOM CSS
-# ─────────────────────────────────────────────
+# ─── Custom CSS ───────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
-
-:root {
-    --bg-primary:    #0a0e1a;
-    --bg-secondary:  #111827;
-    --bg-card:       #1a2235;
-    --accent-cyan:   #00d4ff;
-    --accent-amber:  #ffb300;
-    --accent-green:  #00e676;
-    --accent-red:    #ff4757;
-    --accent-purple: #7c4dff;
-    --text-primary:  #e8eaf6;
-    --text-muted:    #7986a3;
-    --border:        #2a3a5c;
-}
-
-html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-}
-
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
-
-.main .block-container { padding: 1.5rem 2rem; max-width: 1400px; }
-
-.hero-banner {
-    background: linear-gradient(135deg, #0d1b3e 0%, #0a2040 40%, #061428 100%);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 2rem 2.5rem;
-    margin-bottom: 2rem;
-    position: relative;
-    overflow: hidden;
-}
-.hero-banner::before {
-    content: '';
-    position: absolute;
-    top: -60px; right: -60px;
-    width: 220px; height: 220px;
-    background: radial-gradient(circle, rgba(0,212,255,0.12) 0%, transparent 70%);
-    border-radius: 50%;
-}
-.hero-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 1.9rem;
-    font-weight: 700;
-    color: #00d4ff;
-    letter-spacing: -0.5px;
-    margin: 0 0 0.3rem 0;
-    text-shadow: 0 0 30px rgba(0,212,255,0.4);
-}
-.hero-sub { font-size: 0.95rem; color: #7986a3; margin: 0; letter-spacing: 0.5px; }
-.hero-badge {
-    display: inline-block;
-    background: rgba(0,212,255,0.12);
-    border: 1px solid rgba(0,212,255,0.35);
-    color: #00d4ff;
-    border-radius: 20px;
-    padding: 0.2rem 0.8rem;
-    font-size: 0.75rem;
-    font-family: 'Space Mono', monospace;
-    margin-top: 0.8rem;
-    margin-right: 0.5rem;
-}
-.hero-badge-amber { background: rgba(255,179,0,0.10); border-color: rgba(255,179,0,0.35); color: #ffb300; }
-.hero-badge-green { background: rgba(0,230,118,0.10); border-color: rgba(0,230,118,0.35); color: #00e676; }
-
-.metric-row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-.metric-card {
-    flex: 1; min-width: 140px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1rem 1.2rem;
-    position: relative;
-    overflow: hidden;
-}
-.metric-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
-.metric-card.cyan::before  { background: #00d4ff; }
-.metric-card.amber::before { background: #ffb300; }
-.metric-card.green::before { background: #00e676; }
-.metric-card.purple::before{ background: #7c4dff; }
-.metric-card.red::before   { background: #ff4757; }
-.metric-label { font-size: 0.72rem; color: #7986a3; text-transform: uppercase; letter-spacing: 1px; font-family: 'Space Mono', monospace; margin-bottom: 0.4rem; }
-.metric-value { font-family: 'Space Mono', monospace; font-size: 1.4rem; font-weight: 700; color: #e8eaf6; line-height: 1; }
-.metric-unit  { font-size: 0.78rem; color: #7986a3; margin-top: 0.2rem; }
-
-.section-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 1rem; font-weight: 700;
-    color: #00d4ff; text-transform: uppercase; letter-spacing: 2px;
-    margin: 1.5rem 0 0.8rem 0;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--border);
-}
-
-.info-box {
-    background: rgba(0,212,255,0.06);
-    border-left: 3px solid #00d4ff;
-    border-radius: 0 8px 8px 0;
-    padding: 0.8rem 1rem;
-    margin: 0.8rem 0;
-    font-size: 0.88rem;
-    color: #7986a3;
-}
-.warning-box {
-    background: rgba(255,179,0,0.06);
-    border-left: 3px solid #ffb300;
-    border-radius: 0 8px 8px 0;
-    padding: 0.8rem 1rem;
-    margin: 0.8rem 0;
-    font-size: 0.88rem;
-    color: #cca060;
-}
-.formula-box {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 1rem 1.2rem;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.85rem;
-    color: #00d4ff;
-    margin: 0.8rem 0;
-    line-height: 1.8;
-}
-
-[data-testid="stSidebar"] { background: #111827 !important; border-right: 1px solid #2a3a5c; }
-[data-testid="stSidebar"] label { color: #7986a3 !important; font-size: 0.82rem !important; }
-
-div.stTabs [data-baseweb="tab-list"] {
-    background: #111827; border-radius: 10px; padding: 4px; gap: 4px; border: 1px solid #2a3a5c;
-}
-div.stTabs [data-baseweb="tab"] {
-    background: transparent; border-radius: 8px; color: #7986a3;
-    font-family: 'Space Mono', monospace; font-size: 0.8rem; padding: 0.5rem 1.2rem; border: none;
-}
-div.stTabs [aria-selected="true"] { background: #00d4ff !important; color: #000 !important; }
-
-.stButton button {
-    background: linear-gradient(135deg, #00d4ff, #0099cc) !important;
-    color: #000 !important; font-family: 'Space Mono', monospace !important;
-    font-weight: 700 !important; border: none !important; border-radius: 8px !important;
-    padding: 0.5rem 1.5rem !important; letter-spacing: 0.5px !important;
-}
-
-div[data-testid="stExpander"] { background: #1a2235; border: 1px solid #2a3a5c !important; border-radius: 10px; }
+  .main { background-color: #fafaf8; }
+  .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
+  h1 { font-size: 1.55rem !important; font-weight: 600; color: #1a1a1a; }
+  h2 { font-size: 1.15rem !important; font-weight: 600; color: #2d2d2d;
+       border-bottom: 2px solid #e0e0e0; padding-bottom: 6px; }
+  h3 { font-size: 1.0rem !important; font-weight: 600; color: #3a3a3a; }
+  .metric-card {
+      background: white; border: 1px solid #e5e5e5; border-radius: 10px;
+      padding: 14px 18px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+  .metric-val   { font-size: 1.55rem; font-weight: 700; color: #185FA5; }
+  .metric-lbl   { font-size: 0.78rem; color: #666; margin-top: 2px; }
+  .metric-delta { font-size: 0.78rem; color: #1D9E75; font-weight: 600; }
+  .step-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 20px;
+      font-size: 0.75rem; font-weight: 600; margin-right: 6px;
+  }
+  .caption { font-size: 0.82rem; color: #666; font-style: italic;
+             text-align: center; margin-top: 4px; }
+  .info-box {
+      background: #EBF4FF; border-left: 4px solid #185FA5;
+      border-radius: 6px; padding: 10px 14px; margin: 8px 0;
+      font-size: 0.88rem; color: #1a1a1a;
+  }
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# MATPLOTLIB DARK THEME
-# ─────────────────────────────────────────────
-plt.rcParams.update({
-    'figure.facecolor': '#111827', 'axes.facecolor': '#1a2235',
-    'axes.edgecolor': '#2a3a5c', 'axes.labelcolor': '#7986a3',
-    'axes.titlecolor': '#e8eaf6', 'xtick.color': '#7986a3', 'ytick.color': '#7986a3',
-    'grid.color': '#2a3a5c', 'grid.alpha': 0.5, 'legend.facecolor': '#1a2235',
-    'legend.edgecolor': '#2a3a5c', 'legend.labelcolor': '#e8eaf6',
-    'text.color': '#e8eaf6', 'font.family': 'monospace', 'lines.linewidth': 2.0,
-})
-
-CYAN   = '#00d4ff'
-AMBER  = '#ffb300'
-GREEN  = '#00e676'
-RED    = '#ff4757'
-PURPLE = '#7c4dff'
-WHITE  = '#e8eaf6'
-MUTED  = '#7986a3'
-
-# ─────────────────────────────────────────────
-# PHYSICS CORE
-# ─────────────────────────────────────────────
-def rlc_ode(t, y, R, L, C, V0, omega):
-    y1, y2 = y
-    dy1 = y2
-    dy2 = (V0 * omega * np.cos(omega * t) - R * y2 - y1 / C) / L
-    return [dy1, dy2]
-
-def solve_rkf45(R, L, C, V0, f, t_span, rtol=1e-4, atol=1e-6):
-    omega = 2 * np.pi * f
-    sol = solve_ivp(
-        rlc_ode, t_span, [0, 0], method='RK45',
-        args=(R, L, C, V0, omega),
-        rtol=rtol, atol=atol, dense_output=True, max_step=5e-4
-    )
-    return sol
-
-def solve_rk4_fixed(R, L, C, V0, f, t_span, h=1e-4):
-    omega = 2 * np.pi * f
-    t0, tf = t_span
-    t_arr = np.arange(t0, tf + h, h)
-    y = np.zeros((len(t_arr), 2))
-    for i in range(len(t_arr) - 1):
-        t_i, yi = t_arr[i], y[i]
-        k1 = np.array(rlc_ode(t_i,       yi,           R,L,C,V0,omega))
-        k2 = np.array(rlc_ode(t_i+h/2,   yi+h*k1/2,   R,L,C,V0,omega))
-        k3 = np.array(rlc_ode(t_i+h/2,   yi+h*k2/2,   R,L,C,V0,omega))
-        k4 = np.array(rlc_ode(t_i+h,     yi+h*k3,     R,L,C,V0,omega))
-        y[i+1] = yi + (h/6)*(k1 + 2*k2 + 2*k3 + k4)
-    return t_arr, y[:,0]
-
-def analytical_steady_state(t, R, L, C, V0, f):
-    omega = 2 * np.pi * f
-    X     = omega*L - 1/(omega*C)
-    Z     = np.sqrt(R**2 + X**2)
-    I_amp = V0 / Z
-    theta = np.arctan2(X, R)
-    return I_amp * np.sin(omega*t - theta), I_amp, theta, Z, X
-
-def compute_rmse(a, b):
-    return np.sqrt(np.mean((a - b)**2))
-
-def normalized_sensitivity(R, L, C, V0, f, t_arr, param='R', delta=0.10):
-    def get_i(Rv, Lv, Cv):
-        sol = solve_rkf45(Rv, Lv, Cv, V0, f, (t_arr[0], t_arr[-1]), rtol=1e-6, atol=1e-8)
-        return sol.sol(t_arr)[0]
-
-    base = get_i(R, L, C)
-    if param == 'R':
-        p0 = R;  hi = get_i(R*(1+delta),L,C); lo = get_i(R*(1-delta),L,C)
-    elif param == 'L':
-        p0 = L;  hi = get_i(R,L*(1+delta),C); lo = get_i(R,L*(1-delta),C)
-    else:
-        p0 = C;  hi = get_i(R,L,C*(1+delta)); lo = get_i(R,L,C*(1-delta))
-
-    dIdp = (hi - lo) / (2 * delta * p0)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        S = np.where(np.abs(base) > 1e-9, dIdp * p0 / base, 0)
-    return S, base, hi, lo
-
-# ─────────────────────────────────────────────
-# SIDEBAR
-# ─────────────────────────────────────────────
+# ─── Sidebar navigation ───────────────────────────────────────────────────────
 with st.sidebar:
+    st.markdown("### 🔋 GNC Dashboard")
+    st.markdown("**Sintesis Green-Nanoporous Carbon**  \nBiomassa *Durio zibethinus* Kota Medan")
+    st.divider()
+    page = st.radio(
+        "Navigasi",
+        ["🏠 Ringkasan", "🔄 Flowchart Sintesis", "📊 Grafik Elektrokimia"],
+        label_visibility="collapsed",
+    )
+    st.divider()
+    st.markdown("**Parameter Kunci GNC**")
+    st.caption("Luas permukaan BET: **1.623 m²/g**")
+    st.caption("Kapasitansi spesifik: **318 F/g** @ 1 A/g")
+    st.caption("Retensi siklus: **96,3%** @ 10.000 siklus")
+    st.caption("ESR: **0,42 Ω** (vs KAC: 1,87 Ω)")
+    st.caption("Rapat energi: **44,2 Wh/kg**")
+    st.caption("Rapat daya: **9.800 W/kg**")
+    st.divider()
+    st.caption("Referensi: Li et al. (2023); Wang et al. (2024); Zhao et al. (2023)")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HALAMAN 1 — RINGKASAN
+# ═══════════════════════════════════════════════════════════════════════════════
+if page == "🏠 Ringkasan":
+    st.title("Sintesis GNC Berbasis Biomassa Kulit Durian Kota Medan")
+    st.markdown(
+        "*Elektroda Superkapasitor EDLC Performa Tinggi — "
+        "Strategi Kemandirian Energi Sumatera Utara*"
+    )
+    st.divider()
+
+    # ── Metric cards ──────────────────────────────────────────────────────────
+    cols = st.columns(6)
+    metrics = [
+        ("1.623 m²/g", "Luas Permukaan BET",    "+55% vs KAC"),
+        ("318 F/g",    "Kapasitansi Spesifik",   "@ 1 A/g"),
+        ("96,3%",      "Retensi @ 10k siklus",   "+14,2 pp vs KAC"),
+        ("0,42 Ω",     "ESR",                    "4,5× lebih rendah"),
+        ("44,2 Wh/kg", "Rapat Energi",           "+115% vs KAC"),
+        ("9.800 W/kg", "Rapat Daya Puncak",      "+118% vs KAC"),
+    ]
+    for col, (val, lbl, delta) in zip(cols, metrics):
+        with col:
+            st.markdown(
+                f'<div class="metric-card">'
+                f'<div class="metric-val">{val}</div>'
+                f'<div class="metric-lbl">{lbl}</div>'
+                f'<div class="metric-delta">↑ {delta}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("&nbsp;")
+    c1, c2 = st.columns([1.1, 1])
+
+    with c1:
+        st.markdown("### Komposisi Lignoselulosa Kulit Durian")
+        fig_pie = go.Figure(go.Pie(
+            labels=["Selulosa", "Lignin", "Hemiselulosa", "Komponen lain"],
+            values=[43, 22.5, 17.5, 17],
+            hole=0.42,
+            marker_colors=["#185FA5", "#1D9E75", "#BA7517", "#D3D1C7"],
+            textinfo="label+percent",
+            textfont_size=12,
+        ))
+        fig_pie.update_layout(
+            showlegend=True, height=340,
+            legend=dict(orientation="h", y=-0.08, font_size=11),
+            margin=dict(t=10, b=50, l=10, r=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+        st.markdown(
+            '<p class="caption">Analisis proksimat biomassa kulit durian (Nasution et al., 2022)</p>',
+            unsafe_allow_html=True,
+        )
+
+    with c2:
+        st.markdown("### Komparasi Parameter Material Elektroda")
+        df_cmp = pd.DataFrame({
+            "Parameter":       ["BET (m²/g)", "Vol. pori (cm³/g)", "Kapasitansi (F/g)", "Retensi 10k (%)"],
+            "GNC Durian":      [1623, 1.02, 318, 96.3],
+            "KAC Komersial":   [1050, 0.55, 148, 82.1],
+            "Arang Tempurung": [500,  0.33, 105, 74.0],
+        })
+        fig_bar = go.Figure()
+        COLORS = {"GNC Durian": "#185FA5", "KAC Komersial": "#888780", "Arang Tempurung": "#BA7517"}
+        for mat, color in COLORS.items():
+            norm = df_cmp[mat] / df_cmp["GNC Durian"] * 100
+            fig_bar.add_trace(go.Bar(
+                name=mat, x=df_cmp["Parameter"], y=norm, marker_color=color, opacity=0.85,
+                customdata=df_cmp[mat],
+                hovertemplate="%{x}<br>Nilai: %{customdata}<br>Relatif: %{y:.1f}%<extra></extra>",
+            ))
+        fig_bar.update_layout(
+            barmode="group", height=340,
+            yaxis_title="Nilai relatif terhadap GNC (%)",
+            legend=dict(orientation="h", y=-0.15, font_size=11),
+            margin=dict(t=10, b=60, l=50, r=10),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        )
+        fig_bar.update_xaxes(tickfont_size=10)
+        st.plotly_chart(fig_bar, use_container_width=True)
+        st.markdown(
+            '<p class="caption">Nilai dinormalisasi relatif terhadap GNC durian = 100%</p>',
+            unsafe_allow_html=True,
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HALAMAN 2 — FLOWCHART
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "🔄 Flowchart Sintesis":
+    st.title("Bagan Alir Sintesis Green-Nanoporous Carbon (GNC)")
+    st.markdown(
+        "*Rute fabrikasi 10 tahap dari biomassa kulit durian Kota Medan — prinsip green chemistry*"
+    )
+    st.divider()
+
+    show_detail = st.toggle("Tampilkan kondisi operasi lengkap", value=True)
+
+    STEPS = [
+        # (no, judul, sub_singkat, sub_detail, bg, border, grup)
+        (1,  "Pengumpulan Bahan Baku",
+             "3 sentra kuliner Kota Medan",
+             "Kulit durian segar — Pasar Petisah, Simpang Limun, Jl. Sisingamangaraja",
+             "#D6EEE6", "#0F6E56", "Praproses"),
+        (2,  "Praproses Mekanis",
+             "Cuci 3×, potong 2–3 cm",
+             "Pencucian dengan air mengalir (3×); pemotongan fragmen 2–3 cm",
+             "#D6EEE6", "#0F6E56", "Praproses"),
+        (3,  "Pengeringan Awal (Oven)",
+             "110 °C · 24 jam · kadar air <5%",
+             "Oven konveksi 110 °C selama 24 jam hingga massa konstan; kadar air akhir <5%",
+             "#D6EEE6", "#0F6E56", "Praproses"),
+        (4,  "Karbonisasi — Pirolisis N₂",
+             "600 °C · 2 jam → Biochar",
+             "Tubular furnace: ramping 5 °C/menit → 600 °C, tahan 2 jam, N₂ 200 mL/min → Biochar",
+             "#FFF0CC", "#854F0B", "Termal"),
+        (5,  "Impregnasi KOH",
+             "Biochar : KOH = 1:4 · 12 jam",
+             "Campuran biochar:KOH rasio massa 1:4; pengadukan magnetik 12 jam; pengeringan 80 °C",
+             "#FFF0CC", "#854F0B", "Termal"),
+        (6,  "Aktivasi Kimia-Termal",
+             "800 °C · 1 jam → GNC kasar",
+             "Tubular furnace 800 °C / 1 jam, N₂ → 4KOH+C → K₂CO₃+K₂O+2H₂↑ → GNC kasar",
+             "#FCDDD3", "#993C1D", "Purifikasi"),
+        (7,  "Pencucian & Netralisasi",
+             "HCl 1 M → akuades → pH = 7,0",
+             "Pencucian bertahap HCl 1 M lalu akuades berulang; verifikasi pH filtrat = 7,0",
+             "#FCDDD3", "#993C1D", "Purifikasi"),
+        (8,  "Pengeringan Akhir — Freeze Dry",
+             "−50 °C · <0,1 mbar · 48 jam",
+             "Freeze dryer −50 °C, tekanan <0,1 mbar selama 48 jam → GNC kering",
+             "#D6E8F7", "#0C447C", "Pengeringan"),
+        (9,  "Karakterisasi Material",
+             "BET · SEM-EDX · FTIR · Raman · XRD",
+             "Analisis luas permukaan BET, pencitraan SEM-EDX, spektroskopi FTIR & Raman, XRD",
+             "#E8E4F8", "#3C3489", "Karakterisasi"),
+        (10, "Fabrikasi Elektroda & Uji",
+             "Ni-foam · CV · GCD · EIS · 10.000 siklus",
+             "Pencetakan GNC pada substrat Ni-foam; pengujian CV, GCD, EIS, siklus 10.000×",
+             "#E8E4F8", "#3C3489", "Karakterisasi"),
+    ]
+
+    GROUP_COLORS = {
+        "Praproses":     "#0F6E56",
+        "Termal":        "#854F0B",
+        "Purifikasi":    "#993C1D",
+        "Pengeringan":   "#0C447C",
+        "Karakterisasi": "#3C3489",
+    }
+
+    # ── Build Plotly flowchart ────────────────────────────────────────────────
+    BOX_W  = 0.70
+    BOX_H  = 0.075
+    X_CTR  = 0.5
+    X_L    = X_CTR - BOX_W / 2
+    GAP    = 0.028
+    STEP_H = BOX_H + GAP
+    N      = len(STEPS)
+    TOTAL  = N * STEP_H + 0.04
+
+    shapes, annotations = [], []
+
+    for i, (no, lbl, sub_s, sub_d, bg, border, grp) in enumerate(STEPS):
+        y_top = TOTAL - 0.02 - i * STEP_H
+        y_bot = y_top - BOX_H
+        y_ctr = (y_top + y_bot) / 2
+        sub   = sub_d if show_detail else sub_s
+
+        # Box
+        shapes.append(dict(
+            type="rect", xref="paper", yref="paper",
+            x0=X_L, y0=y_bot, x1=X_L + BOX_W, y1=y_top,
+            fillcolor=bg, line=dict(color=border, width=1.5), layer="below",
+        ))
+        # Badge circle
+        shapes.append(dict(
+            type="circle", xref="paper", yref="paper",
+            x0=X_L + 0.005, y0=y_ctr - 0.022,
+            x1=X_L + 0.052, y1=y_ctr + 0.022,
+            fillcolor=border, line_color=border,
+        ))
+        # Badge number
+        annotations.append(dict(
+            x=X_L + 0.029, y=y_ctr, xref="paper", yref="paper",
+            text=f"<b>{no}</b>", showarrow=False,
+            font=dict(size=11, color="white", family="Arial"),
+            xanchor="center", yanchor="middle",
+        ))
+        # Title
+        annotations.append(dict(
+            x=X_L + 0.065, y=y_ctr + 0.013, xref="paper", yref="paper",
+            text=f"<b>{lbl}</b>", showarrow=False,
+            font=dict(size=11.5, color=border, family="Arial"),
+            xanchor="left", yanchor="middle",
+        ))
+        # Subtitle
+        annotations.append(dict(
+            x=X_L + 0.065, y=y_ctr - 0.015, xref="paper", yref="paper",
+            text=f"<span style='color:#555;font-size:10px'>{sub}</span>",
+            showarrow=False,
+            font=dict(size=10, color="#555555", family="Arial"),
+            xanchor="left", yanchor="middle",
+        ))
+        # Arrow
+        if i < N - 1:
+            ay_top = y_bot
+            ay_bot = ay_top - GAP
+            shapes.append(dict(
+                type="line", xref="paper", yref="paper",
+                x0=X_CTR, y0=ay_bot + GAP * 0.15,
+                x1=X_CTR, y1=ay_top - 0.002,
+                line=dict(color="#999999", width=1.5),
+            ))
+            shapes.append(dict(
+                type="path", xref="paper", yref="paper",
+                path=(f"M {X_CTR-0.012} {ay_bot+GAP*0.25} "
+                      f"L {X_CTR+0.012} {ay_bot+GAP*0.25} "
+                      f"L {X_CTR} {ay_bot} Z"),
+                fillcolor="#999999", line_color="#999999",
+            ))
+
+    # Group side bars
+    groups_seen = {}
+    for i, (_, _, _, _, _, border, grp) in enumerate(STEPS):
+        if grp not in groups_seen:
+            idxs   = [j for j, s in enumerate(STEPS) if s[6] == grp]
+            y_tg   = TOTAL - 0.02 - min(idxs) * STEP_H
+            y_bg   = TOTAL - 0.02 - max(idxs) * STEP_H - BOX_H
+            y_mid  = (y_tg + y_bg) / 2
+            grp_x  = X_L + BOX_W + 0.012
+            shapes.append(dict(
+                type="line", xref="paper", yref="paper",
+                x0=grp_x, y0=y_bg, x1=grp_x, y1=y_tg,
+                line=dict(color=GROUP_COLORS[grp], width=3),
+            ))
+            annotations.append(dict(
+                x=grp_x + 0.007, y=y_mid, xref="paper", yref="paper",
+                text=f"<b>{grp}</b>", showarrow=False,
+                font=dict(size=9, color=GROUP_COLORS[grp], family="Arial"),
+                xanchor="left", yanchor="middle", textangle=-90,
+            ))
+            groups_seen[grp] = True
+
+    fig = go.Figure()
+    fig.update_layout(
+        shapes=shapes, annotations=annotations,
+        height=850,
+        margin=dict(l=10, r=90, t=10, b=10),
+        paper_bgcolor="white", plot_bgcolor="white",
+        xaxis=dict(visible=False, range=[0, 1]),
+        yaxis=dict(visible=False, range=[0, TOTAL + 0.02]),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Legend
+    st.markdown("**Kode warna tahapan:**")
+    leg_cols = st.columns(5)
+    for col, (grp, color) in zip(leg_cols, GROUP_COLORS.items()):
+        col.markdown(
+            f'<span class="step-badge" '
+            f'style="background:{color}20;color:{color};border:1px solid {color}">'
+            f'● {grp}</span>',
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+    st.markdown(
+        '<p class="caption">Gambar 1. Bagan alir sintesis Green-Nanoporous Carbon (GNC) dari biomassa kulit '
+        'durian Kota Medan melalui jalur karbonisasi pirolisis N₂ dan aktivasi KOH. Rute dirancang mengikuti '
+        'prinsip green chemistry dengan meminimalkan penggunaan reagen beracun '
+        '(Nasution et al., 2022; Li et al., 2023).</p>',
+        unsafe_allow_html=True,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HALAMAN 3 — GRAFIK ELEKTROKIMIA
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "📊 Grafik Elektrokimia":
+    st.title("Grafik Karakteristik Kinerja Elektrokimia GNC Kulit Durian")
+    st.markdown(
+        "*Lampiran 2 — Proyeksi berdasarkan tinjauan literatur "
+        "(Li et al., 2023; Wang et al., 2024; Zhao et al., 2023)*"
+    )
+    st.divider()
+
+    BLUE  = "#185FA5"
+    LBLUE = "#B5D4F4"
+    GRAY  = "#888780"
+    LGRAY = "#D3D1C7"
+    TEAL  = "#1D9E75"
+    AMBER = "#BA7517"
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "L2-1  CV", "L2-2  GCD", "L2-3  Nyquist EIS",
+        "L2-4  Retensi Siklus", "L2-5  Ragone Plot",
+    ])
+
+    # ── L2-1 Cyclic Voltammetry ───────────────────────────────────────────────
+    with tab1:
+        st.markdown("### Gambar L2-1 — Kurva Cyclic Voltammetry (CV)")
+        st.markdown(
+            '<div class="info-box">Profil CV <i>quasi-rectangular</i> GNC durian pada laju pindai '
+            '5–200 mV/s dalam KOH 6 M menunjukkan perilaku EDLC ideal tanpa puncak faradaik. '
+            'Luas area kurva GNC durian ≈2,1× lebih besar dibandingkan KAC komersial.</div>',
+            unsafe_allow_html=True,
+        )
+        scan_rate = st.select_slider(
+            "Laju pindai (mV/s)", options=[5, 10, 20, 50, 100, 200], value=50
+        )
+        scale = 1 + (scan_rate / 200) * 0.25
+        v = np.linspace(0, 1, 300)
+        ag = 28 * scale;  ak = 13 * scale
+        gnc_t = ag * np.sin(np.pi*v) * (0.85 + 0.15*np.sin(6*np.pi*v))
+        gnc_b = -ag * np.sin(np.pi*v) * (0.85 + 0.12*np.sin(6*np.pi*v))
+        kac_t = ak * np.sin(np.pi*v) * (0.88 + 0.12*np.sin(6*np.pi*v))
+        kac_b = -ak * np.sin(np.pi*v) * (0.88 + 0.10*np.sin(6*np.pi*v))
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=np.concatenate([v, v[::-1]]),
+            y=np.concatenate([gnc_t, gnc_b[::-1]]),
+            fill="toself", fillcolor=LBLUE+"33",
+            line_color="rgba(0,0,0,0)", showlegend=False,
+        ))
+        fig.add_trace(go.Scatter(x=v, y=gnc_t, line=dict(color=BLUE, width=2.2), name="GNC durian"))
+        fig.add_trace(go.Scatter(x=v, y=gnc_b, line=dict(color=BLUE, width=2.2), showlegend=False))
+        fig.add_trace(go.Scatter(
+            x=np.concatenate([v, v[::-1]]),
+            y=np.concatenate([kac_t, kac_b[::-1]]),
+            fill="toself", fillcolor=LGRAY+"22",
+            line_color="rgba(0,0,0,0)", showlegend=False,
+        ))
+        fig.add_trace(go.Scatter(x=v, y=kac_t,
+                                 line=dict(color=GRAY, width=1.8, dash="dash"), name="KAC komersial"))
+        fig.add_trace(go.Scatter(x=v, y=kac_b,
+                                 line=dict(color=GRAY, width=1.8, dash="dash"), showlegend=False))
+        fig.add_hline(y=0, line_color="#cccccc", line_width=0.8)
+        fig.update_layout(
+            height=420, xaxis_title="Tegangan (V)", yaxis_title="Arus (mA/g)",
+            legend=dict(orientation="h", y=1.08, font_size=12),
+            paper_bgcolor="white", plot_bgcolor="white",
+            xaxis=dict(range=[0,1], showgrid=True, gridcolor="#f0f0f0"),
+            yaxis=dict(showgrid=True, gridcolor="#f0f0f0"),
+            margin=dict(t=30, b=50, l=60, r=20),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown(
+            f'<p class="caption">Gambar L2-1. Kurva CV GNC kulit durian vs KAC komersial pada laju pindai '
+            f'{scan_rate} mV/s, elektrolit KOH 6 M, jendela potensial 0–1 V.</p>',
+            unsafe_allow_html=True,
+        )
+
+    # ── L2-2 GCD ─────────────────────────────────────────────────────────────
+    with tab2:
+        st.markdown("### Gambar L2-2 — Kurva Galvanostatic Charge-Discharge (GCD)")
+        st.markdown(
+            '<div class="info-box">Profil GCD berbentuk segitiga simetris pada arus 1–20 A/g. '
+            'Kapasitansi spesifik tertinggi 318 F/g pada 1 A/g dengan retensi 79% pada 20 A/g.</div>',
+            unsafe_allow_html=True,
+        )
+        rates  = [1, 2, 5, 10, 20]
+        gnc_cs = [318, 302, 282, 265, 251]
+        kac_cs = [148, 138, 126, 115, 108]
+
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                name="GNC durian", x=[str(r) for r in rates], y=gnc_cs,
+                marker_color=BLUE, opacity=0.85,
+                text=gnc_cs, textposition="outside", textfont_size=11,
+            ))
+            fig.add_trace(go.Bar(
+                name="KAC komersial", x=[str(r) for r in rates], y=kac_cs,
+                marker_color=GRAY, opacity=0.80,
+                text=kac_cs, textposition="outside", textfont_size=11,
+            ))
+            fig.update_layout(
+                barmode="group", height=400,
+                xaxis_title="Rapat arus (A/g)",
+                yaxis_title="Kapasitansi spesifik (F/g)",
+                yaxis_range=[0, 380],
+                legend=dict(orientation="h", y=1.08, font_size=12),
+                paper_bgcolor="white", plot_bgcolor="white",
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=True, gridcolor="#f0f0f0"),
+                margin=dict(t=40, b=50, l=60, r=20),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        with c2:
+            st.markdown("**Tabel kapasitansi**")
+            df = pd.DataFrame({
+                "Arus (A/g)": rates,
+                "GNC (F/g)":  gnc_cs,
+                "KAC (F/g)":  kac_cs,
+                "Rasio GNC/KAC": [round(g/k, 2) for g, k in zip(gnc_cs, kac_cs)],
+            })
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.markdown(
+                '<p class="caption">GNC 2,1–2,3× lebih tinggi di semua rapat arus.</p>',
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            '<p class="caption">Gambar L2-2. Kapasitansi spesifik GNC kulit durian vs KAC '
+            'komersial pada rapat arus 1–20 A/g, elektrolit KOH 6 M.</p>',
+            unsafe_allow_html=True,
+        )
+
+    # ── L2-3 Nyquist EIS ─────────────────────────────────────────────────────
+    with tab3:
+        st.markdown("### Gambar L2-3 — Nyquist Plot (EIS)")
+        st.markdown(
+            '<div class="info-box">ESR GNC durian = 0,42 Ω (semi-lingkaran kecil di frekuensi tinggi) '
+            'dan garis hampir vertikal di frekuensi rendah — difusi ion cepat, perilaku kapasitif ideal.</div>',
+            unsafe_allow_html=True,
+        )
+
+        def nyq(esr, r, nt=30):
+            ang = np.linspace(0, np.pi, 50)
+            zr  = esr + r - r*np.cos(ang)
+            zi  = r * np.sin(ang)
+            zrt = np.linspace(zr[-1], zr[-1]+0.05, nt)
+            zit = np.linspace(zi[-1], zi[-1]+2.0,  nt)
+            return np.concatenate([zr, zrt]), np.concatenate([zi, zit])
+
+        gzr, gzi = nyq(0.42, 0.18)
+        kzr, kzi = nyq(1.87, 0.55)
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=gzr, y=gzi, mode="lines+markers",
+            line=dict(color=BLUE, width=2.2), marker=dict(size=3),
+            name="GNC durian (ESR = 0,42 Ω)",
+        ))
+        fig.add_trace(go.Scatter(
+            x=kzr, y=kzi, mode="lines+markers",
+            line=dict(color=GRAY, width=1.8, dash="dash"), marker=dict(size=3),
+            name="KAC komersial (ESR = 1,87 Ω)",
+        ))
+        fig.add_annotation(x=0.42, y=0.02, text="ESR = 0,42 Ω",
+                           showarrow=True, arrowhead=2, ax=60, ay=-40,
+                           font=dict(size=10, color=BLUE), arrowcolor=BLUE)
+        fig.add_annotation(x=1.87, y=0.02, text="ESR = 1,87 Ω",
+                           showarrow=True, arrowhead=2, ax=60, ay=-40,
+                           font=dict(size=10, color="#555"), arrowcolor=GRAY)
+        fig.update_layout(
+            height=440, xaxis_title="Z' real (Ω)", yaxis_title="−Z'' imag (Ω)",
+            xaxis_range=[0, 4], yaxis_range=[0, 2.6],
+            legend=dict(orientation="h", y=1.08, font_size=12),
+            paper_bgcolor="white", plot_bgcolor="white",
+            xaxis=dict(showgrid=True, gridcolor="#f0f0f0"),
+            yaxis=dict(showgrid=True, gridcolor="#f0f0f0"),
+            margin=dict(t=40, b=50, l=60, r=20),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown(
+            '<p class="caption">Gambar L2-3. Nyquist plot EIS GNC durian vs KAC komersial. '
+            'Semi-lingkaran kecil = hambatan transfer muatan rendah; garis vertikal = perilaku kapasitif ideal.</p>',
+            unsafe_allow_html=True,
+        )
+
+    # ── L2-4 Retensi Siklus ──────────────────────────────────────────────────
+    with tab4:
+        st.markdown("### Gambar L2-4 — Retensi Kapasitansi vs Jumlah Siklus")
+        st.markdown(
+            '<div class="info-box">Setelah 10.000 siklus GCD pada 10 A/g, GNC durian mempertahankan '
+            '96,3% kapasitansi awal dengan efisiensi coulombik stabil 98,7% — jauh melampaui KAC (82,1%).</div>',
+            unsafe_allow_html=True,
+        )
+        cycles   = [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
+        gnc_ret  = [100, 99.4, 99.0, 98.6, 98.2, 97.8, 97.5, 97.2, 96.9, 96.6, 96.3]
+        kac_ret  = [100, 97.5, 95.8, 94.1, 92.5, 91.0, 89.4, 87.7, 86.1, 84.2, 82.1]
+        gnc_coul = [100, 99.6, 99.3, 99.1, 98.9, 98.8, 98.8, 98.7, 98.7, 98.7, 98.7]
+        kac_coul = [100, 98.0, 96.5, 95.0, 93.8, 92.8, 92.0, 91.6, 91.4, 91.4, 91.4]
+
+        show_coul = st.checkbox("Tampilkan efisiensi coulombik (sumbu kanan)", value=True)
+
+        fig = make_subplots(specs=[[{"secondary_y": show_coul}]])
+        fig.add_trace(go.Scatter(
+            x=cycles, y=gnc_ret, mode="lines+markers",
+            line=dict(color=BLUE, width=2.5), marker=dict(size=5),
+            name="GNC durian — retensi (%)"), secondary_y=False)
+        fig.add_trace(go.Scatter(
+            x=cycles, y=kac_ret, mode="lines+markers",
+            line=dict(color=GRAY, width=2, dash="dash"), marker=dict(size=4, symbol="square"),
+            name="KAC — retensi (%)"), secondary_y=False)
+        if show_coul:
+            fig.add_trace(go.Scatter(
+                x=cycles, y=gnc_coul, mode="lines",
+                line=dict(color=TEAL, width=1.5, dash="dot"),
+                name="GNC durian — coulombik (%)"), secondary_y=True)
+            fig.add_trace(go.Scatter(
+                x=cycles, y=kac_coul, mode="lines",
+                line=dict(color=AMBER, width=1.5, dash="dot"),
+                name="KAC — coulombik (%)"), secondary_y=True)
+        fig.add_hline(y=96.3, line_dash="dot", line_color=BLUE+"88", line_width=1,
+                      annotation_text="GNC: 96,3%", annotation_position="right",
+                      secondary_y=False)
+        fig.add_hline(y=82.1, line_dash="dot", line_color="#88888888", line_width=1,
+                      annotation_text="KAC: 82,1%", annotation_position="right",
+                      secondary_y=False)
+        fig.update_layout(
+            height=440, xaxis_title="Jumlah siklus",
+            legend=dict(orientation="h", y=1.1, font_size=11),
+            paper_bgcolor="white", plot_bgcolor="white",
+            xaxis=dict(
+                showgrid=True, gridcolor="#f0f0f0",
+                tickvals=cycles,
+                ticktext=[f"{c//1000}k" if c >= 1000 else "0" for c in cycles],
+            ),
+            margin=dict(t=40, b=50, l=60, r=70),
+        )
+        fig.update_yaxes(title_text="Retensi kapasitansi (%)", range=[78, 103],
+                         secondary_y=False, showgrid=True, gridcolor="#f0f0f0")
+        if show_coul:
+            fig.update_yaxes(title_text="Efisiensi coulombik (%)", range=[88, 102],
+                             secondary_y=True, showgrid=False)
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown(
+            '<p class="caption">Gambar L2-4. Kurva retensi kapasitansi GNC kulit durian vs KAC komersial '
+            'selama 10.000 siklus GCD pada 10 A/g, elektrolit KOH 6 M.</p>',
+            unsafe_allow_html=True,
+        )
+
+    # ── L2-5 Ragone Plot ─────────────────────────────────────────────────────
+    with tab5:
+        st.markdown("### Gambar L2-5 — Ragone Plot (Rapat Energi vs Rapat Daya)")
+        st.markdown(
+            '<div class="info-box">GNC durian: rapat energi 44,2 Wh/kg dan rapat daya puncak '
+            '9.800 W/kg — melampaui zona karbon aktif konvensional, mendekati batas bawah Li-ion.</div>',
+            unsafe_allow_html=True,
+        )
+        fig = go.Figure()
+
+        # EDLC zone
+        pz = np.array([100, 200, 500, 1000, 3000, 5000])
+        fig.add_trace(go.Scatter(
+            x=np.concatenate([pz, pz[::-1]]),
+            y=np.concatenate([np.array([10,11,12,14,16,18]),
+                               np.array([0.5,1,2,3,4,5])[::-1]]),
+            fill="toself", fillcolor=TEAL+"28",
+            line=dict(color=TEAL, width=1),
+            name="Zona EDLC konvensional",
+        ))
+        # Li-ion zone
+        pl = np.array([50, 100, 200, 500])
+        fig.add_trace(go.Scatter(
+            x=np.concatenate([pl, pl[::-1]]),
+            y=np.concatenate([np.array([280,250,200,130]),
+                               np.array([60,70,80,60])[::-1]]),
+            fill="toself", fillcolor=AMBER+"25",
+            line=dict(color=AMBER, width=1),
+            name="Zona batas bawah Li-ion",
+        ))
+        # KAC trail
+        kac_p = [300, 700, 1500, 2500, 3500, 4500]
+        fig.add_trace(go.Scatter(
+            x=kac_p, y=[20.5]*6, mode="lines",
+            line=dict(color=GRAY, width=1.5, dash="dash"), showlegend=False,
+        ))
+        fig.add_trace(go.Scatter(
+            x=[4500], y=[20.5], mode="markers",
+            marker=dict(size=14, color=GRAY, symbol="circle"),
+            name="KAC komersial (20,5 Wh/kg; 4.500 W/kg)",
+            hovertemplate="KAC<br>E: 20,5 Wh/kg<br>P: 4.500 W/kg<extra></extra>",
+        ))
+        # GNC trail
+        gnc_p = [500, 1500, 3000, 5000, 7000, 9800]
+        fig.add_trace(go.Scatter(
+            x=gnc_p, y=[44.2]*6, mode="lines",
+            line=dict(color=BLUE, width=1.5, dash="dash"), showlegend=False,
+        ))
+        fig.add_trace(go.Scatter(
+            x=[9800], y=[44.2], mode="markers",
+            marker=dict(size=20, color=BLUE, symbol="star"),
+            name="GNC durian (44,2 Wh/kg; 9.800 W/kg)",
+            hovertemplate="GNC durian<br>E: 44,2 Wh/kg<br>P: 9.800 W/kg<extra></extra>",
+        ))
+        fig.add_annotation(
+            x=np.log10(9800), y=44.2,
+            text="<b>GNC Durian</b><br>44,2 Wh/kg · 9.800 W/kg",
+            showarrow=True, arrowhead=2, ax=-130, ay=-55,
+            font=dict(size=11, color=BLUE), arrowcolor=BLUE,
+            bgcolor="white", bordercolor=BLUE, borderwidth=1,
+        )
+        fig.add_annotation(
+            x=np.log10(4500), y=20.5,
+            text="KAC<br>20,5 Wh/kg · 4.500 W/kg",
+            showarrow=True, arrowhead=2, ax=-90, ay=50,
+            font=dict(size=10, color="#555"), arrowcolor=GRAY,
+            bgcolor="white", bordercolor=GRAY, borderwidth=1,
+        )
+        fig.update_layout(
+            height=500, xaxis_title="Rapat daya (W/kg)", yaxis_title="Rapat energi (Wh/kg)",
+            xaxis_type="log",
+            xaxis_range=[np.log10(80), np.log10(25000)],
+            yaxis_range=[0, 100],
+            legend=dict(orientation="h", y=1.10, font_size=11),
+            paper_bgcolor="white", plot_bgcolor="white",
+            xaxis=dict(
+                showgrid=True, gridcolor="#f0f0f0",
+                tickvals=[100,200,500,1000,2000,5000,10000,20000],
+                ticktext=["100","200","500","1k","2k","5k","10k","20k"],
+            ),
+            yaxis=dict(showgrid=True, gridcolor="#f0f0f0"),
+            margin=dict(t=40, b=60, l=70, r=20),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown(
+            '<p class="caption">Gambar L2-5. Ragone plot: posisi kinerja GNC kulit durian (★) relatif '
+            'terhadap KAC komersial, zona EDLC konvensional, dan batas bawah baterai Li-ion.</p>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Footer catatan ────────────────────────────────────────────────────────
+    st.divider()
     st.markdown("""
-    <div style="text-align:center;padding:1rem 0 0.5rem 0;">
-      <div style="font-family:'Space Mono',monospace;font-size:1.1rem;color:#00d4ff;font-weight:700;">⚡ RLC Simulator</div>
-      <div style="font-size:0.7rem;color:#7986a3;margin-top:0.3rem;">Jurnal Pustaka AI · Vol.5 No.3 (2025)</div>
-    </div>
-    <hr style="border-color:#2a3a5c;margin:0.8rem 0;">
-    """, unsafe_allow_html=True)
-
-    st.markdown("**🔧 Parameter Rangkaian**")
-    R     = st.slider("Resistansi R (Ω)",    1.0,  50.0,  10.0, 0.5,   format="%.1f Ω")
-    L_mH  = st.slider("Induktansi L (mH)",  10.0, 300.0, 100.0, 5.0,  format="%.0f mH")
-    C_uF  = st.slider("Kapasitansi C (μF)", 10.0, 500.0, 100.0, 5.0,  format="%.0f μF")
-    V0    = st.slider("Amplitudo V₀ (V)",    1.0,  50.0,  10.0, 1.0,   format="%.1f V")
-    f_src = st.slider("Frekuensi f (Hz)",   50.0,5000.0,1000.0,50.0,   format="%.0f Hz")
-
-    L = L_mH * 1e-3
-    C = C_uF  * 1e-6
-
-    st.markdown("<hr style='border-color:#2a3a5c;margin:0.8rem 0;'>", unsafe_allow_html=True)
-    st.markdown("**⚙️ Konfigurasi Solver**")
-    rtol_exp   = st.select_slider("Toleransi rtol", [-3,-4,-5,-6], value=-4, format_func=lambda x: f"10^{x}")
-    rtol       = 10**rtol_exp
-    t_end_ms   = st.slider("Durasi simulasi (ms)", 20, 200, 100, 10)
-    t_end      = t_end_ms * 1e-3
-    rk4_h      = st.selectbox("Step RK4 (h)", [1e-4, 5e-5, 2e-4], format_func=lambda x: f"{x:.0e} s")
-
-    st.markdown("<hr style='border-color:#2a3a5c;margin:0.8rem 0;'>", unsafe_allow_html=True)
-    st.markdown("**📊 Sensitivitas**")
-    sens_pct   = st.slider("Variasi Δ (%)", 5, 20, 10)
-    sens_delta = sens_pct / 100
-
-# ─────────────────────────────────────────────
-# HERO
-# ─────────────────────────────────────────────
-st.markdown(f"""
-<div class="hero-banner">
-  <div class="hero-title">⚡ Pemodelan Rangkaian RLC · Runge-Kutta Adaptif</div>
-  <div class="hero-sub">Analisis Sensitivitas Parameter menggunakan RKF45 — Jurnal Pustaka AI Vol.5 No.3 (2025)</div>
-  <span class="hero-badge">RKF45 Adaptive</span>
-  <span class="hero-badge hero-badge-amber">RK4 Fixed-Step</span>
-  <span class="hero-badge hero-badge-green">Analytical Validation</span>
-</div>
-""", unsafe_allow_html=True)
-
-# ─────────────────────────────────────────────
-# COMPUTE
-# ─────────────────────────────────────────────
-omega_src = 2 * np.pi * f_src
-t_span    = (0, t_end)
-
-with st.spinner("🔄 Menjalankan simulasi numerik..."):
-    sol45     = solve_rkf45(R, L, C, V0, f_src, t_span, rtol=rtol, atol=1e-6)
-    t45, i45  = sol45.t, sol45.y[0]
-    t_dense   = np.linspace(0, t_end, 5000)
-    i45_dense = sol45.sol(t_dense)[0]
-
-    t_rk4, i_rk4 = solve_rk4_fixed(R, L, C, V0, f_src, t_span, h=rk4_h)
-
-    ss_frac   = 0.8
-    t_ss_mask = t_dense >= t_end * ss_frac
-    t_ss      = t_dense[t_ss_mask]
-    i_ss_analytic, I_amp, theta_ss, Z_imp, X_imp = analytical_steady_state(t_ss, R, L, C, V0, f_src)
-
-    i45_ss   = sol45.sol(t_ss)[0]
-    rmse45   = compute_rmse(i45_ss, i_ss_analytic)
-    i_rk4_ss = np.interp(t_ss, t_rk4, i_rk4)
-    rmse_rk4 = compute_rmse(i_rk4_ss, i_ss_analytic)
-
-    n45  = len(t45)
-    nrk4 = len(t_rk4)
-    red_pct = (1 - n45/nrk4) * 100
-
-    omega0 = 1 / np.sqrt(L * C)
-    f0     = omega0 / (2*np.pi)
-    zeta   = R / (2 * np.sqrt(L/C))
-    Q_fac  = (1/R) * np.sqrt(L/C)
-
-# ─────────────────────────────────────────────
-# METRIC CARDS
-# ─────────────────────────────────────────────
-st.markdown(f"""
-<div class="metric-row">
-  <div class="metric-card cyan">
-    <div class="metric-label">RMSE · RKF45</div>
-    <div class="metric-value">{rmse45:.2e}</div>
-    <div class="metric-unit">vs. Analitik</div>
-  </div>
-  <div class="metric-card amber">
-    <div class="metric-label">RMSE · RK4</div>
-    <div class="metric-value">{rmse_rk4:.2e}</div>
-    <div class="metric-unit">vs. Analitik</div>
-  </div>
-  <div class="metric-card green">
-    <div class="metric-label">Reduksi Langkah</div>
-    <div class="metric-value">{red_pct:.1f}%</div>
-    <div class="metric-unit">RKF45 vs RK4</div>
-  </div>
-  <div class="metric-card purple">
-    <div class="metric-label">Frekuensi Alami ω₀</div>
-    <div class="metric-value">{omega0:.1f}</div>
-    <div class="metric-unit">rad/s</div>
-  </div>
-  <div class="metric-card red">
-    <div class="metric-label">Rasio Redaman ζ</div>
-    <div class="metric-value">{zeta:.4f}</div>
-    <div class="metric-unit">{'Under-damped' if zeta < 1 else 'Over-damped'}</div>
-  </div>
-  <div class="metric-card cyan">
-    <div class="metric-label">Q-factor</div>
-    <div class="metric-value">{Q_fac:.3f}</div>
-    <div class="metric-unit">Faktor kualitas</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ─────────────────────────────────────────────
-# TABS
-# ─────────────────────────────────────────────
-tabs = st.tabs([
-    "🔌 Rangkaian & Model",
-    "📈 Respon Arus",
-    "⚖️ RKF45 vs RK4",
-    "🔍 Analisis Sensitivitas",
-    "📐 Impedansi & Fasor",
-    "📊 Ringkasan Data"
-])
-
-# ══════════════════════════════════════════════
-# TAB 1 — RANGKAIAN & MODEL
-# ══════════════════════════════════════════════
-with tabs[0]:
-    col1, col2 = st.columns([1.2, 1])
-
-    with col1:
-        st.markdown('<div class="section-title">Diagram Rangkaian RLC Seri</div>', unsafe_allow_html=True)
-        fig, ax = plt.subplots(figsize=(9, 5))
-        ax.set_xlim(0, 10); ax.set_ylim(0, 6.5); ax.axis('off')
-        ax.set_facecolor('#0d1b3e')
-        fig.patch.set_facecolor('#0d1b3e')
-
-        lw = 2.8
-        wire = dict(color=CYAN, lw=lw, solid_capstyle='round')
-
-        # Wires
-        ax.plot([1,1],[1,5.5], **wire)            # left vertical
-        ax.plot([1,2.2],[5.5,5.5], **wire)        # top-left
-        ax.plot([3.8,5.2],[5.5,5.5], **wire)      # top-mid1
-        ax.plot([6.8,8.0],[5.5,5.5], **wire)      # top-mid2
-        ax.plot([8.8,9],[5.5,5.5], **wire)        # top-right
-        ax.plot([9,9],[5.5,1], **wire)            # right vertical
-        ax.plot([1,9],[1,1], **wire)              # bottom
-
-        # Voltage source
-        theta_src = np.linspace(0, 2*np.pi, 100)
-        ax.plot(0.62 + 0.28*np.cos(theta_src), 3.25 + 0.5*np.sin(theta_src), color=AMBER, lw=1.8)
-        ax.text(0.6, 3.9, f'V₀={V0}V', ha='center', fontsize=7.5, color=AMBER, fontfamily='monospace')
-        ax.text(0.6, 2.6, f'f={f_src:.0f}Hz', ha='center', fontsize=7.5, color=AMBER, fontfamily='monospace')
-        ax.text(0.62, 4.5, '~', ha='center', fontsize=14, color=AMBER)
-
-        # Resistor (zigzag)
-        xr = np.linspace(2.2, 3.8, 16)
-        yr = 5.5 + 0.38*np.sign(np.sin(np.linspace(0, 7*np.pi, 16)))
-        ax.plot(xr, yr, color=RED, lw=2.8, solid_capstyle='round')
-        ax.text(3.0, 6.15, 'R', ha='center', fontsize=12, color=RED, fontfamily='monospace', fontweight='bold')
-        ax.text(3.0, 4.75, f'{R} Ω', ha='center', fontsize=8, color=RED, fontfamily='monospace')
-
-        # Inductor (bumps)
-        xi = np.linspace(5.2, 6.8, 300)
-        yi = 5.5 + 0.38*np.maximum(np.sin(np.linspace(0, 4*np.pi, 300)), 0)
-        ax.plot(xi, yi, color=GREEN, lw=2.8, solid_capstyle='round')
-        ax.text(6.0, 6.15, 'L', ha='center', fontsize=12, color=GREEN, fontfamily='monospace', fontweight='bold')
-        ax.text(6.0, 4.75, f'{L_mH:.0f} mH', ha='center', fontsize=8, color=GREEN, fontfamily='monospace')
-
-        # Capacitor (parallel plates)
-        ax.plot([8.0,8.4],[5.5,5.5], **wire)
-        ax.plot([8.4,8.4],[4.8,6.2], color=PURPLE, lw=4.5)
-        ax.plot([8.6,8.6],[4.8,6.2], color=PURPLE, lw=4.5)
-        ax.plot([8.6,8.8],[5.5,5.5], **wire)
-        ax.text(8.5, 6.35, 'C', ha='center', fontsize=12, color=PURPLE, fontfamily='monospace', fontweight='bold')
-        ax.text(8.5, 4.5, f'{C_uF:.0f} μF', ha='center', fontsize=8, color=PURPLE, fontfamily='monospace')
-
-        # Current arrow
-        ax.annotate('', xy=(5.8,5.75), xytext=(4.9,5.75),
-                    arrowprops=dict(arrowstyle='->', color=AMBER, lw=2))
-        ax.text(5.35, 5.95, 'i(t)', fontsize=9, color=AMBER, fontfamily='monospace')
-
-        ax.text(5, 0.4, 'Rangkaian RLC Seri — Sumber Tegangan Sinusoidal V(t)=V₀sin(ωt)',
-                ha='center', fontsize=8.5, color=MUTED, fontfamily='monospace')
-        fig.tight_layout()
-        st.pyplot(fig, use_container_width=True)
-        plt.close()
-
-    with col2:
-        st.markdown('<div class="section-title">Model Matematika ODE</div>', unsafe_allow_html=True)
-
-        mode_str  = "Under-damped 🌊" if zeta < 1 else ("Critically damped ⚖️" if abs(zeta-1)<1e-6 else "Over-damped 📉")
-        react_str = "Induktif" if X_imp > 0 else "Kapasitif"
-
-        st.markdown(f"""
-        <div class="formula-box">
-        ── Persamaan Orde-2 (KVL) ──<br>
-        L·d²i/dt² + R·di/dt + (1/C)·i = V₀ω·cos(ωt)<br><br>
-        ── Substitusi Variabel ──<br>
-        y₁ = i(t) &nbsp;&nbsp;, &nbsp;&nbsp; y₂ = di/dt<br><br>
-        ── Sistem ODE Orde-1 ──<br>
-        dy₁/dt = y₂<br>
-        dy₂/dt = [V₀ω·cos(ωt) − R·y₂ − y₁/C] / L<br><br>
-        ── Parameter Karakteristik ──<br>
-        ω₀ = 1/√(LC) = {omega0:.2f} rad/s<br>
-        f₀ = ω₀/2π  = {f0:.2f} Hz<br>
-        ζ  = R/(2√(L/C)) = {zeta:.4f} → {mode_str}<br>
-        Q  = (1/R)√(L/C)  = {Q_fac:.4f}<br>
-        Z  = √(R²+X²)    = {Z_imp:.4f} Ω<br>
-        X  = ωL−1/ωC     = {X_imp:.4f} Ω ({react_str})<br>
-        |I| = V₀/Z       = {I_amp:.6f} A<br>
-        θ  = arctan(X/R) = {np.degrees(theta_ss):.2f}°
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div class="info-box">
-        <b>Solusi Steady-State Analitik:</b><br>
-        i_ss(t) = |I|·sin(ωt − θ)<br>
-        |I| ≈ {I_amp:.6f} A &nbsp;&nbsp; θ ≈ {np.degrees(theta_ss):.2f}°
-        </div>
-        <div class="warning-box">
-        <b>Kondisi Awal:</b> i(0) = 0, di/dt(0) = 0<br>
-        <b>Interval:</b> t ∈ [0, {t_end_ms} ms]<br>
-        <b>Toleransi RKF45:</b> rtol = 10^{rtol_exp}, atol = 10⁻⁶
-        </div>
-        """, unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════
-# TAB 2 — RESPON ARUS
-# ══════════════════════════════════════════════
-with tabs[1]:
-    st.markdown('<div class="section-title">Respon Arus i(t) — Simulasi RKF45 Adaptif</div>', unsafe_allow_html=True)
-
-    t_ms = t_dense * 1e3
-
-    fig = plt.figure(figsize=(13, 8.5))
-    gs  = gridspec.GridSpec(2, 2, hspace=0.45, wspace=0.35)
-    ax_full  = fig.add_subplot(gs[0,:])
-    ax_trans = fig.add_subplot(gs[1,0])
-    ax_ss    = fig.add_subplot(gs[1,1])
-
-    # Full
-    ax_full.plot(t_ms, i45_dense, color=CYAN, lw=1.8, label='RKF45 Adaptif', zorder=3)
-    ax_full.axvspan(0,            min(5, t_end_ms*0.08), alpha=0.10, color=AMBER)
-    ax_full.axvspan(t_end_ms*ss_frac, t_end_ms,         alpha=0.08, color=GREEN)
-    ax_full.axhline( I_amp, color=RED, lw=1, ls='--', alpha=0.5, label=f'|I|={I_amp:.5f} A')
-    ax_full.axhline(-I_amp, color=RED, lw=1, ls='--', alpha=0.5)
-    ax_full.set_xlabel('Waktu (ms)'); ax_full.set_ylabel('Arus i(t) (A)')
-    ax_full.set_title('Respon Arus Rangkaian RLC — Metode RKF45 Adaptif', color=WHITE, pad=10)
-    ax_full.legend(fontsize=8, loc='upper right'); ax_full.grid(True, alpha=0.3)
-    ax_full.set_xlim(0, t_end_ms)
-    # Annotations
-    ax_full.text(t_end_ms*0.03, I_amp*1.3, 'Transien', color=AMBER, fontsize=8, fontfamily='monospace')
-    ax_full.text(t_end_ms*(ss_frac+0.02), I_amp*1.3, 'Steady-State', color=GREEN, fontsize=8, fontfamily='monospace')
-
-    # Transient zoom
-    t_tr_end = min(10, t_end_ms*0.15)
-    mask_tr  = t_ms <= t_tr_end
-    ax_trans.plot(t_ms[mask_tr], i45_dense[mask_tr], color=AMBER, lw=2.2)
-    ax_trans.fill_between(t_ms[mask_tr], i45_dense[mask_tr], alpha=0.15, color=AMBER)
-    ax_trans.set_xlabel('Waktu (ms)'); ax_trans.set_ylabel('Arus (A)')
-    ax_trans.set_title(f'Fase Transien (0–{t_tr_end:.0f} ms)', color=AMBER, pad=8)
-    ax_trans.grid(True, alpha=0.3)
-
-    # Steady-state comparison
-    t_ss_ms = t_ss * 1e3
-    ax_ss.plot(t_ss_ms, i45_ss,        color=RED,   lw=2.2, label='RKF45 Numerik')
-    ax_ss.plot(t_ss_ms, i_ss_analytic, color=GREEN, lw=1.5, ls='--', label='Solusi Analitik')
-    ax_ss.fill_between(t_ss_ms, i45_ss, i_ss_analytic, alpha=0.2, color=AMBER,
-                       label=f'Error: RMSE={rmse45:.2e}')
-    ax_ss.set_xlabel('Waktu (ms)'); ax_ss.set_ylabel('Arus (A)')
-    ax_ss.set_title('Validasi Steady-State: RKF45 vs Analitik', color=GREEN, pad=8)
-    ax_ss.legend(fontsize=7); ax_ss.grid(True, alpha=0.3)
-
-    fig.patch.set_facecolor('#111827')
-    st.pyplot(fig, use_container_width=True)
-    plt.close()
-
-    # Step size
-    st.markdown('<div class="section-title">Adaptivitas Ukuran Langkah RKF45</div>', unsafe_allow_html=True)
-    fig2, ax2 = plt.subplots(figsize=(13, 3.5))
-    dt_arr  = np.diff(t45) * 1e3
-    t45_mid = ((t45[:-1]+t45[1:])/2) * 1e3
-    ax2.semilogy(t45_mid, dt_arr, color=PURPLE, lw=1.2, alpha=0.7)
-    ax2.fill_between(t45_mid, dt_arr, alpha=0.12, color=PURPLE)
-    ax2.axhline(dt_arr.min(), color=AMBER, ls='--', lw=1.2,
-                label=f'h_min = {dt_arr.min():.5f} ms (Transien cepat)')
-    ax2.axhline(dt_arr.max(), color=GREEN, ls='--', lw=1.2,
-                label=f'h_max = {dt_arr.max():.5f} ms (Steady-state)')
-    ax2.set_xlabel('Waktu (ms)'); ax2.set_ylabel('Step h (ms) — skala log')
-    ax2.set_title('Variasi Ukuran Langkah Adaptif — RKF45 menyesuaikan otomatis terhadap dinamika sistem', color=WHITE)
-    ax2.legend(fontsize=8); ax2.grid(True, alpha=0.3, which='both'); ax2.set_xlim(0, t_end_ms)
-    fig2.patch.set_facecolor('#111827')
-    st.pyplot(fig2, use_container_width=True)
-    plt.close()
-
-# ══════════════════════════════════════════════
-# TAB 3 — RKF45 vs RK4
-# ══════════════════════════════════════════════
-with tabs[2]:
-    st.markdown('<div class="section-title">Perbandingan: RKF45 Adaptif vs RK4 Langkah Tetap</div>', unsafe_allow_html=True)
-
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-
-    # Comparison window
-    t_cmp = np.linspace(t_end * ss_frac, min(t_end * ss_frac + 4e-3, t_end), 600)
-    i_rkf_cmp  = sol45.sol(t_cmp)[0]
-    i_rk4_cmp  = np.interp(t_cmp, t_rk4, i_rk4)
-    i_anal_cmp, *_ = analytical_steady_state(t_cmp, R, L, C, V0, f_src)
-
-    ax = axes[0]
-    ax.plot(t_cmp*1e3, i_rkf_cmp,  color=RED,   lw=2.5, label='RKF45 Adaptif', zorder=4)
-    ax.plot(t_cmp*1e3, i_rk4_cmp,  color=AMBER,  lw=1.8, ls='-.', label=f'RK4 (h={rk4_h:.0e}s)', zorder=3)
-    ax.plot(t_cmp*1e3, i_anal_cmp, color=GREEN,  lw=1.5, ls='--', label='Solusi Analitik')
-    ax.set_xlabel('Waktu (ms)'); ax.set_ylabel('Arus (A)')
-    ax.set_title('Perbandingan pada Keadaan Tunak', color=WHITE)
-    ax.legend(fontsize=8); ax.grid(True, alpha=0.3)
-
-    # Performance bars
-    ax2 = axes[1]
-    methods = ['RKF45\nAdaptif', 'RK4\nFixed']
-    rmses   = [rmse45, rmse_rk4]
-    colors  = [CYAN, AMBER]
-    bars = ax2.bar(methods, rmses, color=colors, width=0.4, alpha=0.85, edgecolor='#2a3a5c')
-    for bar, v in zip(bars, rmses):
-        ax2.text(bar.get_x()+bar.get_width()/2, bar.get_height()*1.05,
-                 f'{v:.3e}', ha='center', fontsize=9, color=WHITE, fontfamily='monospace')
-    ax2.set_ylabel('RMSE'); ax2.set_title('RMSE & Jumlah Langkah Integrasi', color=WHITE)
-    ax2.grid(True, alpha=0.3, axis='y')
-
-    ax3 = ax2.twinx()
-    ax3.plot(methods, [n45, nrk4], 'o--', color=PURPLE, lw=2.2, ms=10)
-    ax3.set_ylabel('Jumlah Langkah Integrasi', color=PURPLE)
-    ax3.tick_params(axis='y', labelcolor=PURPLE)
-    for i_m, (m, s) in enumerate(zip(methods, [n45, nrk4])):
-        ax3.annotate(f'{s}', (i_m, s), textcoords='offset points', xytext=(12, 4),
-                     fontsize=9, color=PURPLE, fontfamily='monospace')
-
-    fig.patch.set_facecolor('#111827')
-    fig.tight_layout()
-    st.pyplot(fig, use_container_width=True)
-    plt.close()
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown(f"""<div class="metric-card cyan" style="text-align:center;">
-          <div class="metric-label">RKF45 · Langkah</div>
-          <div class="metric-value">{n45}</div>
-          <div class="metric-unit">integrasi adaptif</div></div>""", unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"""<div class="metric-card amber" style="text-align:center;">
-          <div class="metric-label">RK4 · Langkah</div>
-          <div class="metric-value">{nrk4}</div>
-          <div class="metric-unit">integrasi tetap</div></div>""", unsafe_allow_html=True)
-    with c3:
-        st.markdown(f"""<div class="metric-card green" style="text-align:center;">
-          <div class="metric-label">Efisiensi</div>
-          <div class="metric-value">{red_pct:.1f}%</div>
-          <div class="metric-unit">reduksi langkah</div></div>""", unsafe_allow_html=True)
-
-    st.markdown(f"""
-    <div class="info-box" style="margin-top:1rem;">
-    <b>Interpretasi:</b> RKF45 mencapai RMSE ≈ {rmse45:.2e} dengan hanya {n45} langkah,
-    sedangkan RK4 membutuhkan {nrk4} langkah untuk RMSE ≈ {rmse_rk4:.2e}.
-    Reduksi ~{red_pct:.0f}% langkah integrasi tanpa mengorbankan akurasi secara signifikan.
-    Ini konsisten dengan temuan jurnal (reduksi ≈40%).
+    <div style="background:#f8f8f6;border-radius:8px;padding:10px 16px;
+                font-size:0.82rem;color:#666;">
+    <b>Catatan:</b> Seluruh data pada grafik merupakan proyeksi berdasarkan tinjauan literatur
+    komprehensif terhadap material GNC sejenis. Data aktual dihasilkan setelah karakterisasi
+    laboratorium selesai dilaksanakan.<br>
+    Referensi: Li et al. (2023) <i>Adv. Energy Mater.</i>; Wang et al. (2024)
+    <i>Electrochimica Acta</i>; Zhao et al. (2023) <i>Nano Energy</i>.
     </div>
     """, unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════
-# TAB 4 — ANALISIS SENSITIVITAS
-# ══════════════════════════════════════════════
-with tabs[3]:
-    st.markdown('<div class="section-title">Analisis Sensitivitas Parameter R, L, C</div>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="info-box">
-    <b>Metode:</b> Koefisien Sensitivitas Ternormalisasi dengan Beda-Hingga Terpusat (Central Finite Difference)<br>
-    <b>Formula:</b> Sₚ = (∂i/∂p) × (p/i(t)) &nbsp;·&nbsp; Variasi ±{sens_pct}% dari nilai nominal
-    </div>
-    """, unsafe_allow_html=True)
-
-    with st.spinner("🔄 Menghitung 9 simulasi sensitivitas..."):
-        t_sens     = np.linspace(t_end*ss_frac, t_end, 400)
-        t_sens_ms  = t_sens * 1e3
-        S_R, iR_b, iR_hi, iR_lo = normalized_sensitivity(R, L, C, V0, f_src, t_sens, 'R', sens_delta)
-        S_L, iL_b, iL_hi, iL_lo = normalized_sensitivity(R, L, C, V0, f_src, t_sens, 'L', sens_delta)
-        S_C, iC_b, iC_hi, iC_lo = normalized_sensitivity(R, L, C, V0, f_src, t_sens, 'C', sens_delta)
-
-    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
-    fig.suptitle(f'Analisis Sensitivitas Parameter RLC (Variasi ±{sens_pct}%)',
-                 color=WHITE, fontsize=13, y=0.98)
-
-    param_info = [
-        ('R', S_R, iR_b, iR_hi, iR_lo, RED,    f'Baseline R={R}Ω',       f'R+{sens_pct}%',  f'R-{sens_pct}%'),
-        ('L', S_L, iL_b, iL_hi, iL_lo, GREEN,  f'Baseline L={L_mH:.0f}mH',f'L+{sens_pct}%', f'L-{sens_pct}%'),
-        ('C', S_C, iC_b, iC_hi, iC_lo, PURPLE, f'Baseline C={C_uF:.0f}μF', f'C+{sens_pct}%', f'C-{sens_pct}%'),
-    ]
-
-    for ci, (nm, S, ib, ihi, ilo, clr, lb, lbhi, lblo) in enumerate(param_info):
-        # Top: current variation
-        ax_v = axes[0, ci]
-        ax_v.plot(t_sens_ms, ib,  color=CYAN,  lw=2,   label=lb,   zorder=3)
-        ax_v.plot(t_sens_ms, ihi, color=clr,   lw=1.5, ls='--', label=lbhi, alpha=0.85)
-        ax_v.plot(t_sens_ms, ilo, color=AMBER, lw=1.5, ls='-.', label=lblo, alpha=0.85)
-        ax_v.fill_between(t_sens_ms, ihi, ilo, alpha=0.10, color=clr)
-        ax_v.set_xlabel('Waktu (ms)'); ax_v.set_ylabel('Arus (A)' if ci==0 else '')
-        ax_v.set_title(f'Pengaruh Variasi Parameter {nm}', color=clr)
-        ax_v.legend(fontsize=7); ax_v.grid(True, alpha=0.3)
-
-        # Bottom: sensitivity coefficient (clipped)
-        ax_s = axes[1, ci]
-        S_clip = np.clip(S, -10, 10)
-        ax_s.plot(t_sens_ms, S_clip, color=clr, lw=2)
-        ax_s.fill_between(t_sens_ms, S_clip, alpha=0.18, color=clr)
-        ax_s.axhline(0, color=MUTED, lw=0.8, ls='--')
-        mean_S = np.mean(S_clip)
-        ax_s.axhline(mean_S, color=AMBER, lw=1.2, ls='--', label=f'S̄={mean_S:.3f}')
-        ax_s.set_xlabel('Waktu (ms)'); ax_s.set_ylabel(f'S_{nm}(t)' if ci==0 else '')
-        ax_s.set_title(f'Koefisien Sensitivitas S_{nm}(t) [clip ±10]', color=clr)
-        ax_s.legend(fontsize=7); ax_s.grid(True, alpha=0.3); ax_s.set_ylim(-10, 10)
-
-    fig.patch.set_facecolor('#111827')
-    fig.tight_layout()
-    st.pyplot(fig, use_container_width=True)
-    plt.close()
-
-    # Dominance chart
-    st.markdown('<div class="section-title">Urutan Dominasi Sensitivitas</div>', unsafe_allow_html=True)
-    mSR = abs(np.mean(np.clip(S_R,-10,10)))
-    mSL = abs(np.mean(np.clip(S_L,-10,10)))
-    mSC = abs(np.mean(np.clip(S_C,-10,10)))
-
-    sorted_items = sorted({'|S_L| — Induktansi':mSL, '|S_C| — Kapasitansi':mSC,
-                           '|S_R| — Resistansi':mSR}.items(), key=lambda x: x[1], reverse=True)
-
-    fig3, ax3 = plt.subplots(figsize=(9, 3.5))
-    clrs_dom = [GREEN, PURPLE, RED]
-    bars = ax3.barh([s[0] for s in sorted_items], [s[1] for s in sorted_items],
-                    color=clrs_dom, alpha=0.85, height=0.5, edgecolor='#2a3a5c')
-    for bar, (lbl, v) in zip(bars, sorted_items):
-        ax3.text(v + 0.01, bar.get_y() + bar.get_height()/2,
-                 f'{v:.4f}', va='center', fontsize=10, color=WHITE, fontfamily='monospace')
-    ax3.set_xlabel('|Koefisien Sensitivitas Rata-rata|')
-    ax3.set_title('Dominasi Sensitivitas: |S_L| ≫ |S_C| > |S_R|  (Konsisten dengan Teori RLC)', color=WHITE)
-    ax3.grid(True, alpha=0.3, axis='x'); ax3.invert_yaxis()
-    fig3.patch.set_facecolor('#111827'); fig3.tight_layout()
-
-    col_b, col_t = st.columns([1.5, 1])
-    with col_b:
-        st.pyplot(fig3, use_container_width=True)
-    with col_t:
-        st.markdown(f"""
-        <div class="formula-box">
-        Urutan Dominasi (Jurnal):<br>
-        |S_L| ≫ |S_C| > |S_R|<br><br>
-        Nilai saat ini:<br>
-        S̄_L = {np.mean(np.clip(S_L,-10,10)):.4f}<br>
-        S̄_C = {np.mean(np.clip(S_C,-10,10)):.4f}<br>
-        S̄_R = {np.mean(np.clip(S_R,-10,10)):.4f}<br><br>
-        Interpretasi:<br>
-        L → Frekuensi osilasi (dominan)<br>
-        C → Fase & karakter transien<br>
-        R → Tingkat redaman (minor)
-        </div>
-        """, unsafe_allow_html=True)
-    plt.close()
-
-# ══════════════════════════════════════════════
-# TAB 5 — IMPEDANSI & FASOR
-# ══════════════════════════════════════════════
-with tabs[4]:
-    st.markdown('<div class="section-title">Karakteristik Frekuensi & Diagram Fasor</div>', unsafe_allow_html=True)
-
-    f_sw  = np.logspace(1, 5, 1000)
-    om_sw = 2 * np.pi * f_sw
-    X_sw  = om_sw*L - 1/(om_sw*C)
-    Z_sw  = np.sqrt(R**2 + X_sw**2)
-    I_sw  = V0 / Z_sw
-    ph_sw = -np.arctan2(X_sw, R) * 180 / np.pi
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-    ax = axes[0]
-    ax.semilogx(f_sw, Z_sw, color=CYAN, lw=2.5)
-    ax.fill_between(f_sw, Z_sw, alpha=0.07, color=CYAN)
-    ax.axvline(f0,    color=AMBER, ls='--', lw=1.5, label=f'f₀={f0:.1f} Hz (resonansi)')
-    ax.axvline(f_src, color=RED,   ls=':',  lw=1.5, label=f'f_src={f_src:.0f} Hz')
-    ax.set_xlabel('Frekuensi (Hz)'); ax.set_ylabel('|Z(f)| (Ω)')
-    ax.set_title('Impedansi |Z(f)|', color=WHITE)
-    ax.legend(fontsize=8); ax.grid(True, alpha=0.3, which='both')
-
-    ax2 = axes[1]
-    ax2.semilogx(f_sw, I_sw, color=GREEN, lw=2.5)
-    ax2.fill_between(f_sw, I_sw, alpha=0.07, color=GREEN)
-    ax2.axvline(f0,    color=AMBER, ls='--', lw=1.5, label=f'f₀={f0:.1f} Hz')
-    ax2.axvline(f_src, color=RED,   ls=':',  lw=1.5, label=f'f_src={f_src:.0f} Hz')
-    ax2.axhline(I_amp, color=WHITE, ls=':', lw=0.8, label=f'I_op={I_amp:.5f} A')
-    ax2.set_xlabel('Frekuensi (Hz)'); ax2.set_ylabel('|I(f)| (A)')
-    ax2.set_title('Amplitudo Arus |I(f)|', color=WHITE)
-    ax2.legend(fontsize=7); ax2.grid(True, alpha=0.3, which='both')
-
-    ax3 = axes[2]
-    ax3.semilogx(f_sw, ph_sw, color=PURPLE, lw=2.5)
-    ax3.fill_between(f_sw, ph_sw, alpha=0.07, color=PURPLE)
-    ax3.axhline(0, color=MUTED, ls='--', lw=0.8)
-    ax3.axvline(f0, color=AMBER, ls='--', lw=1.5, label=f'f₀={f0:.1f} Hz')
-    ax3.set_xlabel('Frekuensi (Hz)'); ax3.set_ylabel('Fase (°)')
-    ax3.set_title('Diagram Fase θ(f)', color=WHITE)
-    ax3.legend(fontsize=8); ax3.grid(True, alpha=0.3, which='both')
-
-    fig.patch.set_facecolor('#111827')
-    fig.tight_layout()
-    st.pyplot(fig, use_container_width=True)
-    plt.close()
-
-    # Phasor diagram
-    st.markdown('<div class="section-title">Diagram Fasor Tegangan Steady-State</div>', unsafe_allow_html=True)
-
-    V_R  = I_amp * R
-    V_L  = I_amp * omega_src * L
-    V_C_ = I_amp / (omega_src * C)
-    V_net_y = V_L - V_C_
-
-    fig4, ax4 = plt.subplots(figsize=(6, 6))
-    ax4.set_aspect('equal')
-    Vmax = max(V0, V_L, V_C_) * 1.3
-    ax4.set_xlim(-Vmax*0.3, Vmax*1.3); ax4.set_ylim(-Vmax*1.2, Vmax*1.3)
-    ax4.axhline(0, color=MUTED, lw=0.8, alpha=0.5)
-    ax4.axvline(0, color=MUTED, lw=0.8, alpha=0.5)
-    ax4.set_facecolor('#0d1b3e'); fig4.patch.set_facecolor('#111827')
-
-    arrow_kw = lambda c: dict(arrowprops=dict(arrowstyle='->', color=c, lw=2.5), xytext=(0,0))
-    ax4.annotate('', xy=(V_R*0.55, 0), **arrow_kw(CYAN))
-    ax4.text(V_R*0.28, 0.08*Vmax, f'I={I_amp:.4f}A', color=CYAN, fontsize=8, fontfamily='monospace')
-    ax4.annotate('', xy=(V_R, 0), **arrow_kw(RED))
-    ax4.text(V_R/2, -0.08*Vmax, f'V_R={V_R:.3f}V', color=RED, fontsize=8, fontfamily='monospace', ha='center')
-    ax4.annotate('', xy=(0, V_L), **arrow_kw(GREEN))
-    ax4.text(0.04*Vmax, V_L/2, f'V_L={V_L:.3f}V', color=GREEN, fontsize=8, fontfamily='monospace')
-    ax4.annotate('', xy=(0, -V_C_), **arrow_kw(PURPLE))
-    ax4.text(0.04*Vmax, -V_C_/2, f'V_C={V_C_:.3f}V', color=PURPLE, fontsize=8, fontfamily='monospace')
-    ax4.annotate('', xy=(V_R, V_net_y), **arrow_kw(AMBER))
-    ax4.text(V_R+0.04*Vmax, V_net_y/2, f'V₀={V0}V', color=AMBER, fontsize=9, fontfamily='monospace', fontweight='bold')
-
-    ax4.set_xlabel('Re (V)'); ax4.set_ylabel('Im (V)')
-    ax4.set_title('Diagram Fasor Tegangan RLC', color=WHITE, pad=10)
-    ax4.grid(True, alpha=0.3)
-
-    legend_patches = [
-        mpatches.Patch(color=CYAN,   label='I (referensi)'),
-        mpatches.Patch(color=RED,    label='V_R (sefase I)'),
-        mpatches.Patch(color=GREEN,  label='V_L (lead 90°)'),
-        mpatches.Patch(color=PURPLE, label='V_C (lag 90°)'),
-        mpatches.Patch(color=AMBER,  label='V₀ = V_R + j(V_L − V_C)'),
-    ]
-    ax4.legend(handles=legend_patches, fontsize=7.5, loc='upper left')
-    fig4.tight_layout()
-
-    col_ph, col_info = st.columns([1, 1.2])
-    with col_ph:
-        st.pyplot(fig4, use_container_width=True)
-    with col_info:
-        st.markdown(f"""
-        <div class="formula-box">
-        ── Nilai Fasor Saat Ini ──<br>
-        Z   = {Z_imp:.4f} Ω<br>
-        X_L = ωL    = {omega_src*L:.4f} Ω<br>
-        X_C = 1/ωC  = {1/(omega_src*C):.4f} Ω<br>
-        X   = X_L−X_C = {X_imp:.4f} Ω<br><br>
-        V_R  = I·R   = {V_R:.4f} V<br>
-        V_L  = I·X_L = {V_L:.4f} V<br>
-        V_C  = I·X_C = {V_C_:.4f} V<br><br>
-        θ = arctan(X/R) = {np.degrees(theta_ss):.2f}°<br>
-        |I| = V₀/Z     = {I_amp:.6f} A<br><br>
-        ── Resonansi ──<br>
-        f₀ = {f0:.2f} Hz<br>
-        f_src = {f_src:.0f} Hz<br>
-        Status: {'Induktif (f > f₀)' if f_src > f0 else 'Kapasitif (f < f₀)'}
-        </div>
-        """, unsafe_allow_html=True)
-    plt.close()
-
-# ══════════════════════════════════════════════
-# TAB 6 — RINGKASAN DATA
-# ══════════════════════════════════════════════
-with tabs[5]:
-    st.markdown('<div class="section-title">Tabel Ringkasan Hasil Simulasi</div>', unsafe_allow_html=True)
-
-    df_perf = pd.DataFrame({
-        'Metode':           ['RKF45 Adaptif', 'RK4 Fixed-Step'],
-        'Jumlah Langkah':   [n45, nrk4],
-        'RMSE vs Analitik': [f'{rmse45:.4e}', f'{rmse_rk4:.4e}'],
-        'Efisiensi':        [f'{red_pct:.1f}% lebih sedikit', 'Referensi'],
-        'Step Size':        ['Adaptif (variabel)', f'{rk4_h:.0e} s (tetap)'],
-    })
-
-    mSR_v = np.mean(np.clip(S_R,-10,10))
-    mSL_v = np.mean(np.clip(S_L,-10,10))
-    mSC_v = np.mean(np.clip(S_C,-10,10))
-
-    df_sens = pd.DataFrame({
-        'Parameter':         ['R (Resistansi)', 'L (Induktansi)', 'C (Kapasitansi)'],
-        'Nilai Nominal':     [f'{R} Ω', f'{L_mH:.0f} mH', f'{C_uF:.0f} μF'],
-        'Rentang Uji':       [f'{R*(1-sens_delta):.1f}–{R*(1+sens_delta):.1f} Ω',
-                              f'{L_mH*(1-sens_delta):.0f}–{L_mH*(1+sens_delta):.0f} mH',
-                              f'{C_uF*(1-sens_delta):.0f}–{C_uF*(1+sens_delta):.0f} μF'],
-        'S̄ (Steady-State)': [f'{mSR_v:.4f}', f'{mSL_v:.4f}', f'{mSC_v:.4f}'],
-        'Pengaruh Dominan':  ['Redaman', 'Frekuensi Osilasi', 'Fase & Transien'],
-        'Ranking':           ['3', '1', '2'],
-    })
-
-    df_sys = pd.DataFrame({
-        'Besaran': ['ω₀','f₀','ζ','Q-factor','Z','|I|','θ','Mode Redaman',
-                    'X_L','X_C','X','RMSE RKF45','RMSE RK4','Reduksi Langkah'],
-        'Nilai':   [f'{omega0:.4f} rad/s', f'{f0:.4f} Hz', f'{zeta:.6f}',
-                    f'{Q_fac:.4f}', f'{Z_imp:.4f} Ω', f'{I_amp:.6f} A',
-                    f'{np.degrees(theta_ss):.2f}°',
-                    'Under-damped' if zeta < 1 else 'Over-damped',
-                    f'{omega_src*L:.4f} Ω', f'{1/(omega_src*C):.4f} Ω',
-                    f'{X_imp:.4f} Ω', f'{rmse45:.4e}', f'{rmse_rk4:.4e}',
-                    f'{red_pct:.1f}%'],
-    })
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**⚡ Performa Metode Numerik**")
-        st.dataframe(df_perf, use_container_width=True, hide_index=True)
-        st.markdown("**🔬 Parameter Sistem (Lengkap)**")
-        st.dataframe(df_sys, use_container_width=True, hide_index=True)
-    with c2:
-        st.markdown("**📊 Analisis Sensitivitas Parameter**")
-        st.dataframe(df_sens, use_container_width=True, hide_index=True)
-
-        st.markdown(f"""
-        <div class="info-box" style="margin-top:1rem;">
-        <b>Kesimpulan Jurnal (reproduksi numerik):</b><br>
-        ✅ RKF45 RMSE ≈ {rmse45:.2e} (target jurnal: ~1.39×10⁻⁴)<br>
-        ✅ Reduksi langkah: {red_pct:.0f}% (target jurnal: ~40%)<br>
-        ✅ Dominasi sensitivitas: |S_L| ≫ |S_C| > |S_R|
-        </div>
-        """, unsafe_allow_html=True)
-
-    with st.expander("📄 Tentang Jurnal & Metode RKF45"):
-        st.markdown("""
-        <div class="info-box">
-        <b>Referensi:</b><br>
-        David Eka Putra, Reski Yulian Fauzan, Amran Paso Salmeno (2025)<br>
-        <i>"Analisis Sensitivitas Parameter Rangkaian RLC Menggunakan Runge-Kutta Adaptif
-        untuk Akurasi Numerik Optimal"</i><br>
-        Jurnal Pustaka AI, Vol. 5 No. 3, hal. 573–582<br>
-        DOI: https://doi.org/10.55382/jurnalpustakaai.v5i3.1432<br>
-        Politeknik Negeri Padang
-        </div>
-        <div class="formula-box" style="margin-top:0.8rem;">
-        Algoritma RKF45 — Kontrol Galat Lokal:<br><br>
-        1. Hitung k1..k6 dari evaluasi fungsi f(t, y)<br>
-        2. Solusi orde-4: y4 = y + h·(25k1/216 + 1408k3/2565 + 2197k4/4104 - k5/5)<br>
-        3. Solusi orde-5: y5 = y + h·(16k1/135 + 6656k3/12825 + ...)<br>
-        4. Error = |y5 - y4|<br>
-        5. h_baru = h × (ε/error)^(1/4)<br>
-        6. Jika error ≤ ε → terima langkah, else → ulangi dengan h lebih kecil
-        </div>
-        """, unsafe_allow_html=True)
-
-    col_dl1, col_dl2 = st.columns(2)
-    with col_dl1:
-        st.download_button("⬇️ Download Tabel Sensitivitas (CSV)", df_sens.to_csv(index=False),
-                           "rlc_sensitivity.csv", "text/csv")
-    with col_dl2:
-        st.download_button("⬇️ Download Parameter Sistem (CSV)", df_sys.to_csv(index=False),
-                           "rlc_system_params.csv", "text/csv")
